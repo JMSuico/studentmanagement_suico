@@ -1,0 +1,233 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject IUserService UserService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>My Profile</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">My Profile</MudText>
+
+    @if (isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (currentUser != null)
+    {
+        <MudCard Elevation="3">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Primary" Size="Size.Large">
+                        @if (!string.IsNullOrEmpty(currentUser.ProfileImage))
+                        {
+                            <MudImage Src="@currentUser.ProfileImage" />
+                        }
+                        else
+                        {
+                             @currentUser.FirstName.FirstOrDefault()
+                        }
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">@currentUser.FirstName @currentUser.LastName</MudText>
+                    <MudText Typo="Typo.body2">@currentUser.Role.ToString()</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="OpenEditProfileDialog" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField Label="Username" Value="currentUser.Username" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField Label="Email" Value="currentUser.Email" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField Label="Location" Value="currentUser.Location" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField Label="Phone Number" Value="currentUser.PhoneNumber" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider Class="my-6" />
+                <MudText Typo="Typo.h6" Class="mb-4">Change Password</MudText>
+                
+                <MudForm @ref="passwordForm">
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="currentPassword" Label="Current Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" RequiredError="Current password is required." />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="VerifyCurrentPassword" Disabled="@(string.IsNullOrEmpty(currentPassword) || isVerifying)">
+                                @if (isVerifying)
+                                {
+                                    <MudProgressCircular Class="me-2" Size="Size.Small" Indeterminate="true" />
+                                    <span>Verifying...</span>
+                                }
+                                else
+                                {
+                                    <span>Verify Password</span>
+                                }
+                            </MudButton>
+                        </MudItem>
+
+                        @if (isPasswordVerified)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="newPassword" Label="New Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" RequiredError="New password is required." />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="confirmNewPassword" Label="Confirm New Password" InputType="InputType.Password" Variant="Variant.Outlined" Required="true" RequiredError="Please confirm new password." />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="ChangePassword" Disabled="@isChangingPassword">
+                                    @if (isChangingPassword)
+                                    {
+                                        <MudProgressCircular Class="me-2" Size="Size.Small" Indeterminate="true" />
+                                        <span>Changing Password...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Change Password</span>
+                                    }
+                                </MudButton>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudForm>
+            </MudCardContent>
+        </MudCard>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Could not load profile information.</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private User? currentUser;
+    private bool isLoading = true;
+
+    // Password change fields
+    private MudForm passwordForm = null!;
+    private string currentPassword = "";
+    private string newPassword = "";
+    private string confirmNewPassword = "";
+    private bool isVerifying = false;
+    private bool isPasswordVerified = false;
+    private bool isChangingPassword = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfile();
+    }
+
+    private async Task LoadProfile()
+    {
+        isLoading = true;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var username = user.Identity!.Name;
+            if (!string.IsNullOrEmpty(username))
+            {
+                currentUser = await UserService.GetUserByUsernameAsync(username);
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task OpenEditProfileDialog()
+    {
+        if (currentUser == null) return;
+
+        var parameters = new DialogParameters<ProfileEditDialog> { { x => x.User, currentUser } };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ProfileEditDialog>("Edit Profile", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            await LoadProfile();
+        }
+    }
+
+    private async Task VerifyCurrentPassword()
+    {
+        if (currentUser == null || string.IsNullOrEmpty(currentPassword)) return;
+
+        isVerifying = true;
+        try
+        {
+            var user = await UserService.AuthenticateAsync(currentUser.Username, currentPassword);
+            if (user != null)
+            {
+                isPasswordVerified = true;
+                Snackbar.Add("Password verified successfully. You may now enter your new password.", Severity.Success);
+            }
+            else
+            {
+                isPasswordVerified = false;
+                Snackbar.Add("Incorrect current password.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isVerifying = false;
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        if (currentUser == null || !isPasswordVerified) return;
+
+        if (string.IsNullOrEmpty(newPassword) || string.IsNullOrEmpty(confirmNewPassword))
+        {
+            Snackbar.Add("Please fill out both new password fields.", Severity.Warning);
+            return;
+        }
+
+        if (newPassword != confirmNewPassword)
+        {
+            Snackbar.Add("New password and confirm password do not match.", Severity.Error);
+            return;
+        }
+
+        isChangingPassword = true;
+        try
+        {
+            await UserService.ChangePasswordAsync(currentUser.Id, currentPassword, newPassword);
+            Snackbar.Add("Password changed successfully.", Severity.Success);
+            
+            // Reset form
+            currentPassword = "";
+            newPassword = "";
+            confirmNewPassword = "";
+            isPasswordVerified = false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isChangingPassword = false;
+        }
+    }
+}

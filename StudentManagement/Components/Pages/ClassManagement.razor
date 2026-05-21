@@ -1,0 +1,303 @@
+@page "/classes"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = "Admin,Teacher,Staff,Student")]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject IClassSectionService ClassSectionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Class Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Classes</MudText>
+        @if (!isStudent)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Class</MudButton>
+        }
+    </div>
+
+    <MudTable T="ClassSection" Items="@classes" Dense="true" Hover="true" Loading="@isLoading" Striped="true"
+              Filter="new Func<ClassSection,bool>(FilterFunc)" MultiSelection="false"
+              OnRowClick="OnRowClicked" RowStyle="cursor: pointer;">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh></MudTh>
+            <MudTh>Class Name</MudTh>
+            <MudTh>Subject</MudTh>
+            <MudTh>Instructor</MudTh>
+            <MudTh>Section</MudTh>
+            <MudTh>Room</MudTh>
+            <MudTh>Schedule</MudTh>
+            <MudTh>Semester</MudTh>
+            <MudTh>School Year</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudIconButton Icon="@(IsExpanded(context.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               Size="Size.Small" OnClick="@(() => ToggleExpand(context.Id))" />
+            </MudTd>
+            <MudTd DataLabel="Class Name">@context.ClassName</MudTd>
+            <MudTd DataLabel="Subject">@(context.Subject?.SubjectCode ?? "N/A")</MudTd>
+            <MudTd DataLabel="Instructor">@(context.Teacher?.LastName ?? "N/A"), @(context.Teacher?.FirstName ?? "")</MudTd>
+            <MudTd DataLabel="Section">@context.SectionName</MudTd>
+            <MudTd DataLabel="Room">@context.Room</MudTd>
+            <MudTd DataLabel="Schedule">
+                @context.Schedule
+                @if (context.Schedules.Any())
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-1">@context.Schedules.Count schedule(s)</MudChip>
+                }
+                else if (context.StartTime.HasValue && context.EndTime.HasValue)
+                {
+                    <br /><small class="text-secondary">@FormatTime(context.StartTime.Value) - @FormatTime(context.EndTime.Value)</small>
+                }
+            </MudTd>
+            <MudTd DataLabel="Semester">@context.Semester</MudTd>
+            <MudTd DataLabel="School Year">@context.SchoolYear</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">@context.Status.ToString()</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => ViewClass(context))" />
+                @if (!isStudent)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteClass(context))" />
+                }
+            </MudTd>
+        </RowTemplate>
+        <ChildRowContent>
+            @if (IsExpanded(context.Id))
+            {
+                <MudTr>
+                    <td colspan="11" style="padding: 0;">
+                        <MudPaper Elevation="0" Class="pa-3 ma-2" Style="background: var(--mud-palette-background-grey);">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" Class="mr-1" />
+                                Schedule Details
+                            </MudText>
+                            @if (context.Schedules.Any())
+                            {
+                                <MudSimpleTable Dense="true" Hover="true" Style="background: white; border-radius: 8px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Day</th>
+                                            <th>Start Time</th>
+                                            <th>End Time</th>
+                                            <th>Repeat</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var schedule in context.Schedules.OrderBy(s => s.ScheduleDate))
+                                        {
+                                            <tr>
+                                                <td>@schedule.ScheduleDate.ToString("MM/dd/yyyy")</td>
+                                                <td>@schedule.DayOfWeek</td>
+                                                <td>@FormatTime(schedule.StartTime)</td>
+                                                <td>@FormatTime(schedule.EndTime)</td>
+                                                <td>
+                                                    @if (schedule.IsWeeklyRepeat)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                                            Every @schedule.DayOfWeek
+                                                        </MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">One-time</MudChip>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudPaper Elevation="0" Class="pa-3" Style="background: white; border-radius: 8px;">
+                                    @if (context.StartTime.HasValue && context.EndTime.HasValue)
+                                    {
+                                        <MudText Typo="Typo.body2">
+                                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                            <strong>Time:</strong> @FormatTime(context.StartTime.Value) - @FormatTime(context.EndTime.Value)
+                                        </MudText>
+                                        @if (!string.IsNullOrWhiteSpace(context.DaysOfWeek))
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mt-1">
+                                                <MudIcon Icon="@Icons.Material.Filled.DateRange" Size="Size.Small" Class="mr-1" />
+                                                <strong>Days:</strong> @context.DaysOfWeek
+                                            </MudText>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <MudAlert Severity="Severity.Info" Dense="true" NoIcon="false">
+                                            No detailed schedules configured for this class. Use the edit button to add schedules.
+                                        </MudAlert>
+                                    }
+                                </MudPaper>
+                            }
+                        </MudPaper>
+                    </td>
+                </MudTr>
+            }
+        </ChildRowContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<ClassSection> classes = new List<ClassSection>();
+    private bool isLoading = true;
+    private string searchString = "";
+    private HashSet<int> expandedRows = new();
+    private bool isStudent = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        isStudent = authState.User.IsInRole("Student");
+        await LoadClasses();
+    }
+
+    private async Task LoadClasses()
+    {
+        isLoading = true;
+        classes = await ClassSectionService.GetAllClassesAsync();
+        isLoading = false;
+    }
+
+    private bool IsExpanded(int id) => expandedRows.Contains(id);
+
+    private void ToggleExpand(int id)
+    {
+        if (!expandedRows.Remove(id))
+            expandedRows.Add(id);
+    }
+
+    private void OnRowClicked(TableRowClickEventArgs<ClassSection> args)
+    {
+        if (args.Item != null)
+        {
+            ToggleExpand(args.Item.Id);
+        }
+    }
+
+    private bool FilterFunc(ClassSection classSection)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (classSection.ClassName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (classSection.SectionName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (classSection.Subject?.SubjectName?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        return false;
+    }
+
+    private async Task ViewClass(ClassSection classSection)
+    {
+        var scheduleInfo = string.Join("\n", classSection.Schedules.OrderBy(s => s.ScheduleDate).Select(s =>
+            $"  {s.ScheduleDate:MM/dd/yyyy} ({s.DayOfWeek}) {FormatTime(s.StartTime)} - {FormatTime(s.EndTime)}" +
+            (s.IsWeeklyRepeat ? " [Weekly]" : "")));
+        if (string.IsNullOrEmpty(scheduleInfo))
+            scheduleInfo = "  No schedules configured";
+
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Class: {classSection.ClassName}\nSection: {classSection.SectionName}\nSubject: {classSection.Subject?.SubjectCode ?? "N/A"} - {classSection.Subject?.SubjectName ?? "N/A"}\nTeacher: {classSection.Teacher?.FirstName ?? ""} {classSection.Teacher?.LastName ?? "N/A"}\nPeriod: {classSection.Schedule}\nRoom: {classSection.Room}\nAcademic Year: {classSection.SchoolYear}\nSemester: {classSection.Semester}\nCapacity: {classSection.MaxCapacity}\nStatus: {classSection.Status}\n\nSchedules:\n{scheduleInfo}",
+            ["ButtonText"] = "Close",
+            ["Color"] = Color.Primary
+        };
+        await DialogService.ShowAsync<ConfirmDialog>("Class Details", parameters);
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["ClassSection"] = new ClassSection { ClassName = "", SectionName = "", SchoolYear = "", Semester = "", Schedule = "", Room = "" }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ClassSectionFormDialog>("Add Class", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var newClass = (ClassSection)result.Data!;
+            await ClassSectionService.AddClassAsync(newClass);
+            Snackbar.Add("Class added successfully", Severity.Success);
+            await LoadClasses();
+        }
+    }
+
+    private async Task OpenEditDialog(ClassSection classSection)
+    {
+        // Reload with tracked entity for editing
+        var tracked = await ClassSectionService.GetClassByIdAsync(classSection.Id);
+        if (tracked == null) return;
+
+        var parameters = new DialogParameters
+        {
+            ["ClassSection"] = tracked
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ClassSectionFormDialog>("Edit Class", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var updatedClass = (ClassSection)result.Data!;
+            await ClassSectionService.UpdateClassAsync(updatedClass);
+            Snackbar.Add("Class updated successfully", Severity.Success);
+            await LoadClasses();
+        }
+    }
+
+    private async Task DeleteClass(ClassSection classSection)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {classSection.ClassName} {classSection.SectionName}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Class", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await ClassSectionService.DeleteClassAsync(classSection.Id);
+                Snackbar.Add("Class deleted successfully", Severity.Success);
+                await LoadClasses();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private static string FormatTime(TimeSpan time)
+    {
+        var dt = DateTime.Today.Add(time);
+        return dt.ToString("h:mm tt");
+    }
+}

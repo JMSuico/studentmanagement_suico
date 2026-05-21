@@ -1,0 +1,109 @@
+@using StudentManagement.Features.Data.Enums
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudSelect @bind-Value="status" Label="Attendance Status" Required="true">
+                @foreach (AttendanceStatus item in Enum.GetValues(typeof(AttendanceStatus)))
+                {
+                    <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+            
+            <MudSelect T="string" Value="schedule" ValueChanged="OnScheduleChanged" Label="Schedule" Required="true" Class="mt-4">
+                <MudSelectItem Value="@("Morning (A.M.)")">Morning (A.M.)</MudSelectItem>
+                <MudSelectItem Value="@("Afternoon (P.M.)")">Afternoon (P.M.)</MudSelectItem>
+            </MudSelect>
+
+            <div class="d-flex align-center gap-4 mt-4">
+                <MudTimePicker Time="timeIn" TimeChanged="OnTimeInChanged" Label="Time In" Editable="true" AmPm="true" />
+                <MudTimePicker Time="timeOut" TimeChanged="OnTimeOutChanged" Label="Time Out" Editable="true" AmPm="true" />
+            </div>
+
+            <MudTextField @bind-Value="remarks" Label="Remarks" Lines="2" Class="mt-4" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public AttendanceStatus Status { get; set; } = AttendanceStatus.Present;
+    [Parameter] public TimeSpan? TimeIn { get; set; }
+    [Parameter] public TimeSpan? TimeOut { get; set; }
+    [Parameter] public string? Remarks { get; set; }
+
+    private AttendanceStatus status;
+    private TimeSpan? timeIn;
+    private TimeSpan? timeOut;
+    private string? remarks;
+    private string schedule = "Morning (A.M.)";
+
+    bool success = true;
+    MudForm form = null!;
+
+    protected override void OnInitialized()
+    {
+        status = Status;
+        timeIn = TimeIn;
+        timeOut = TimeOut;
+        remarks = Remarks;
+
+        if (timeIn.HasValue)
+        {
+            schedule = timeIn.Value.Hours >= 12 ? "Afternoon (P.M.)" : "Morning (A.M.)";
+        }
+        else
+        {
+            // Default to morning
+            schedule = "Morning (A.M.)";
+            timeIn = new TimeSpan(8, 0, 0);
+            timeOut = new TimeSpan(12, 0, 0);
+        }
+    }
+
+    private void OnScheduleChanged(string value)
+    {
+        schedule = value;
+        if (schedule == "Morning (A.M.)")
+        {
+            timeIn = new TimeSpan(8, 0, 0);
+            timeOut = new TimeSpan(12, 0, 0);
+        }
+        else
+        {
+            timeIn = new TimeSpan(13, 0, 0);
+            timeOut = new TimeSpan(17, 0, 0);
+        }
+    }
+
+    private void OnTimeInChanged(TimeSpan? time)
+    {
+        timeIn = time;
+        if (time.HasValue)
+        {
+            schedule = time.Value.Hours >= 12 ? "Afternoon (P.M.)" : "Morning (A.M.)";
+        }
+    }
+
+    private void OnTimeOutChanged(TimeSpan? time)
+    {
+        timeOut = time;
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            var result = new { Status = status, TimeIn = timeIn, TimeOut = timeOut, Remarks = remarks };
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

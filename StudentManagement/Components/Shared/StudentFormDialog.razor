@@ -1,0 +1,160 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <!-- Circular Profile Image Upload Component -->
+            <div class="d-flex flex-column align-center mb-6">
+                <div class="position-relative">
+                    <MudAvatar Style="width:120px; height:120px;" Class="elevation-3">
+                        @if (!string.IsNullOrEmpty(Student.ProfileImage))
+                        {
+                            <MudImage Src="@Student.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Style="font-size: 5rem;" />
+                        }
+                    </MudAvatar>
+                    <InputFile id="studentFileInput" OnChange="UploadStudentImage" hidden accept=".jpg,.jpeg,.png" />
+                    <MudIconButton HtmlTag="label"
+                                   for="studentFileInput"
+                                   Icon="@Icons.Material.Filled.PhotoCamera"
+                                   Color="Color.Primary"
+                                   Variant="Variant.Filled"
+                                   Class="position-absolute bottom-0 right-0 ma-0"
+                                   Style="border-radius: 50%; transform: translate(15%, 15%); width: 36px; height: 36px; min-width: 36px; z-index: 10;" />
+                </div>
+                @if (isUploading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" Style="max-width: 150px;" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mt-2 text-secondary">Click camera icon to upload profile photo</MudText>
+                }
+            </div>
+
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Student.StudentNumber" Label="Student Number" Required="true" RequiredError="Student Number is required!" />
+                    <MudTextField @bind-Value="Student.FirstName" Label="First Name" Required="true" RequiredError="First Name is required!" />
+                    <MudTextField @bind-Value="Student.MiddleName" Label="Middle Name" />
+                    <MudTextField @bind-Value="Student.LastName" Label="Last Name" Required="true" RequiredError="Last Name is required!" />
+                    <MudNumericField @bind-Value="Student.YearLevel" Label="Year Level" Required="true" Min="1" Max="4" />
+                    <MudSelect @bind-Value="Student.Section" Label="Section">
+                        <MudSelectItem Value="@("A")">A</MudSelectItem>
+                        <MudSelectItem Value="@("B")">B</MudSelectItem>
+                        <MudSelectItem Value="@("C")">C</MudSelectItem>
+                        <MudSelectItem Value="@("D")">D</MudSelectItem>
+                        <MudSelectItem Value="@("E")">E</MudSelectItem>
+                        <MudSelectItem Value="@("F")">F</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudDatePicker @bind-Date="dob" Label="Date of Birth" Editable="true" Required="true" RequiredError="DOB is required!" />
+                    <MudSelect @bind-Value="Student.Gender" Label="Gender" Required="true" RequiredError="Gender is required!">
+                        <MudSelectItem Value="@("Male")">Male</MudSelectItem>
+                        <MudSelectItem Value="@("Female")">Female</MudSelectItem>
+                        <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                    </MudSelect>
+                    <MudTextField @bind-Value="Student.Address" Label="Address" Required="true" />
+                    <MudTextField @bind-Value="Student.Email" Label="Email" />
+                    <MudTextField @bind-Value="Student.ContactNumber" Label="Contact Number" Required="true" />
+                    <MudSelect @bind-Value="Student.Status" Label="Status">
+                        @foreach (StudentStatus item in Enum.GetValues(typeof(StudentStatus)))
+                        {
+                            <MudSelectItem Value="@item">@item.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mt-4 mb-2">System Credentials</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4 text-muted">Leave empty to use defaults (Email/Student Number for username, Student Number for password).</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="Student.SystemUsername" Label="System Username" HelperText="Custom username for login" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="Student.SystemPassword" Label="System Password" InputType="InputType.Password" HelperText="Custom password for login" />
+                        </MudItem>
+                    </MudGrid>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Student Student { get; set; } = new Student { StudentNumber = "", FirstName = "", LastName = "", Gender = "", Address = "", ContactNumber = "" };
+
+    bool success = true;
+    MudForm form = null!;
+    DateTime? dob = DateTime.Today;
+    private bool isUploading;
+
+    protected override void OnInitialized()
+    {
+        if (Student.Id > 0)
+        {
+            dob = Student.DateOfBirth;
+        }
+    }
+
+    private async Task UploadStudentImage(InputFileChangeEventArgs e)
+    {
+        isUploading = true;
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                if (file.Size > 2 * 1024 * 1024)
+                {
+                    Snackbar.Add("Image size should be less than 2MB", Severity.Warning);
+                    return;
+                }
+
+                var format = file.ContentType;
+                using var stream = file.OpenReadStream(2 * 1024 * 1024);
+                using var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                var buffer = ms.ToArray();
+                Student.ProfileImage = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+                Snackbar.Add("Profile photo updated successfully!", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            if (dob.HasValue)
+            {
+                Student.DateOfBirth = dob.Value;
+            }
+            MudDialog.Close(DialogResult.Ok(Student));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

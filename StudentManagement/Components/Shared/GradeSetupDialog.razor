@@ -1,0 +1,111 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@inject IGradeService GradeService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudText Typo="Typo.h6" Class="mb-3">Main Grading Categories</MudText>
+            <MudText Typo="Typo.caption" Class="mb-4 text-secondary">These four categories must total exactly 100%.</MudText>
+
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="Setup.QuizzesPercentage" Label="Quizzes %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="Setup.LongExamPercentage" Label="Long Exam %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="Setup.PerformancePercentage" Label="Performance %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="Setup.SemesterExamPercentage" Label="Semester Exam %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+            </MudGrid>
+
+            @if (MainTotal != 100)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                    Main categories total: <strong>@MainTotal%</strong>. Must equal 100%.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-3" Dense="true">
+                    Main categories total: <strong>100%</strong> ✓
+                </MudAlert>
+            }
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" Class="mb-1">Performance Breakdown</MudText>
+            <MudText Typo="Typo.caption" Class="mb-4 text-secondary">
+                These sub-categories must total exactly <strong>@Setup.PerformancePercentage%</strong> (matching the Performance category above).
+            </MudText>
+
+            <MudGrid>
+                <MudItem xs="4">
+                    <MudNumericField @bind-Value="Setup.HandsOnPercentage" Label="Hands-on %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="4">
+                    <MudNumericField @bind-Value="Setup.PracticalPercentage" Label="Practical Exam %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="4">
+                    <MudNumericField @bind-Value="Setup.OralPercentage" Label="Oral / Assignment %" Min="0" Max="100" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+            </MudGrid>
+
+            @if (PerformanceBreakdownTotal != Setup.PerformancePercentage)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                    Performance breakdown total: <strong>@PerformanceBreakdownTotal%</strong>. Must equal @Setup.PerformancePercentage%.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-3" Dense="true">
+                    Performance breakdown total: <strong>@PerformanceBreakdownTotal%</strong> ✓
+                </MudAlert>
+            }
+
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!IsValid)">Save Setup</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public SubjectGradeSetup Setup { get; set; } = new SubjectGradeSetup { Semester = "" };
+
+    bool success;
+    MudForm form = null!;
+
+    private decimal MainTotal =>
+        Setup.QuizzesPercentage +
+        Setup.LongExamPercentage +
+        Setup.PerformancePercentage +
+        Setup.SemesterExamPercentage;
+
+    private decimal PerformanceBreakdownTotal =>
+        Setup.HandsOnPercentage +
+        Setup.PracticalPercentage +
+        Setup.OralPercentage;
+
+    private bool IsValid => MainTotal == 100 && PerformanceBreakdownTotal == Setup.PerformancePercentage;
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid && IsValid)
+        {
+            await GradeService.SaveGradeSetupAsync(Setup);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

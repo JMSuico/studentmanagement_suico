@@ -1,0 +1,161 @@
+@page "/teachers"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin,Teacher,Staff")]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject ITeacherService TeacherService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Teacher Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Teachers</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Teacher</MudButton>
+    </div>
+
+    <MudTable Items="@teachers" Dense="true" Hover="true" Loading="@isLoading" Striped="true" Filter="new Func<Teacher,bool>(FilterFunc)">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Photo</MudTh>
+            <MudTh>Employee No</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Department</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Photo">
+                <MudAvatar Size="Size.Medium" Class="elevation-1">
+                    @if (!string.IsNullOrEmpty(context.ProfileImage))
+                    {
+                        <MudImage Src="@context.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                    }
+                </MudAvatar>
+            </MudTd>
+            <MudTd DataLabel="Employee No">@context.EmployeeNumber</MudTd>
+            <MudTd DataLabel="Name">@context.FirstName @context.LastName</MudTd>
+            <MudTd DataLabel="Department">@context.Department</MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => ViewTeacher(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteTeacher(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<Teacher> teachers = new List<Teacher>();
+    private bool isLoading = true;
+    private string searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTeachers();
+    }
+
+    private async Task LoadTeachers()
+    {
+        isLoading = true;
+        teachers = await TeacherService.GetAllTeachersAsync();
+        isLoading = false;
+    }
+
+    private bool FilterFunc(Teacher teacher)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (teacher.EmployeeNumber.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (teacher.FirstName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (teacher.LastName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private async Task ViewTeacher(Teacher teacher)
+    {
+        var parameters = new DialogParameters { ["Teacher"] = teacher };
+        await DialogService.ShowAsync<TeacherViewDialog>("Teacher Details", parameters);
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<TeacherFormDialog>("Create Teacher");
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var newTeacher = (Teacher)result.Data!;
+                await TeacherService.CreateTeacherAsync(newTeacher);
+                Snackbar.Add("Teacher created successfully", Severity.Success);
+                await LoadTeachers();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Teacher teacher)
+    {
+        var parameters = new DialogParameters { ["Teacher"] = teacher };
+        var dialog = await DialogService.ShowAsync<TeacherFormDialog>("Edit Teacher", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var updatedTeacher = (Teacher)result.Data!;
+                await TeacherService.UpdateTeacherAsync(updatedTeacher);
+                Snackbar.Add("Teacher updated successfully", Severity.Success);
+                await LoadTeachers();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTeacher(Teacher teacher)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {teacher.FirstName} {teacher.LastName}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Teacher", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await TeacherService.DeleteTeacherAsync(teacher.Id);
+                Snackbar.Add("Teacher deleted successfully", Severity.Success);
+                await LoadTeachers();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+}

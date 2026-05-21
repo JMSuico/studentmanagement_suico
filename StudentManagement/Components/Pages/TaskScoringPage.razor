@@ -1,0 +1,164 @@
+@page "/tasks/score/{TaskId:int}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin,Teacher")]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@inject ITaskService TaskService
+@inject IEnrollmentService EnrollmentService
+@inject ISnackbar Snackbar
+
+<PageTitle>Task Scoring</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Score Task: @task?.Title</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" Href="/tasks">Back to Tasks</MudButton>
+    </div>
+
+    @if (task != null)
+    {
+        <MudCard Class="mb-6">
+            <MudCardContent>
+                <MudText Typo="Typo.body1"><strong>Category:</strong> @task.Category</MudText>
+                <MudText Typo="Typo.body1"><strong>Max Points:</strong> @task.MaxPoints</MudText>
+                <MudText Typo="Typo.body1"><strong>Deadline:</strong> @task.Deadline.ToString("yyyy-MM-dd")</MudText>
+            </MudCardContent>
+        </MudCard>
+
+        <MudTable Items="@studentResults" Dense="true" Hover="true" Striped="true" Loading="@isLoading">
+            <HeaderContent>
+                <MudTh>Student Name</MudTh>
+                <MudTh>Year Level</MudTh>
+                <MudTh>Points</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Student Name">@context.StudentName</MudTd>
+                <MudTd DataLabel="Year Level">@context.YearLevelDisplay</MudTd>
+                <MudTd DataLabel="Points">
+                    <MudNumericField @bind-Value="context.Points" Min="0" Max="(double)task.MaxPoints" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudSelect T="ClassTaskStatus" @bind-Value="context.Status" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (ClassTaskStatus s in Enum.GetValues(typeof(ClassTaskStatus)))
+                        {
+                            <MudSelectItem Value="@s">@s.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="@(() => SaveScore(context))">Save</MudButton>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">No enrolled students found for this subject. Students must be Enrolled or Approved in a class section linked to this subject.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public int TaskId { get; set; }
+
+    private ClassTask? task;
+    private List<StudentTaskScoreModel> studentResults = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        task = await TaskService.GetTaskByIdAsync(TaskId);
+        if (task != null)
+        {
+            await LoadStudentsAndScores();
+        }
+    }
+
+    private async Task LoadStudentsAndScores()
+    {
+        isLoading = true;
+        var allEnrollments = await EnrollmentService.GetAllEnrollmentsAsync();
+        
+        // Include both Enrolled and Approved students.
+        // Students go through Pending → Approved → Enrolled workflow.
+        // Both Approved and Enrolled students should appear for scoring.
+        var subjectEnrollments = allEnrollments
+            .Where(e => e.ClassSection?.SubjectId == task!.SubjectId 
+                && (e.Status == EnrollmentStatus.Enrolled || e.Status == EnrollmentStatus.Approved))
+            .ToList();
+
+        var existingResults = await TaskService.GetResultsForTaskAsync(TaskId);
+
+        studentResults.Clear();
+        foreach (var student in subjectEnrollments.Select(e => e.Student).Where(s => s != null).DistinctBy(s => s!.Id))
+        {
+            if (student == null) continue;
+
+            var existing = existingResults.FirstOrDefault(r => r.StudentId == student.Id);
+            studentResults.Add(new StudentTaskScoreModel
+            {
+                StudentId = student.Id,
+                StudentName = $"{student.FirstName} {student.LastName}",
+                YearLevel = student.YearLevel,
+                ResultId = existing?.Id ?? 0,
+                Points = (double)(existing?.PointsEarned ?? 0),
+                Status = existing?.Status ?? ClassTaskStatus.NoSubmission
+            });
+        }
+        
+        // Sort by year level then name for consistency
+        studentResults = studentResults.OrderBy(s => s.YearLevel).ThenBy(s => s.StudentName).ToList();
+        isLoading = false;
+    }
+
+    private async Task SaveScore(StudentTaskScoreModel model)
+    {
+        try
+        {
+            var result = new StudentTaskResult
+            {
+                Id = model.ResultId,
+                ClassTaskId = TaskId,
+                StudentId = model.StudentId,
+                PointsEarned = (decimal)model.Points,
+                Status = model.Status,
+                SubmittedAt = DateTime.UtcNow
+            };
+
+            // Compute score: (PointsEarned / MaxPoints) * 100
+            if (task != null && task.MaxPoints > 0)
+            {
+                result.ComputedScore = (result.PointsEarned / task.MaxPoints) * 100;
+            }
+
+            var saved = await TaskService.SaveStudentResultAsync(result);
+            model.ResultId = saved.Id;
+            Snackbar.Add($"Score saved for {model.StudentName}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    public class StudentTaskScoreModel
+    {
+        public int StudentId { get; set; }
+        public string StudentName { get; set; } = "";
+        public int YearLevel { get; set; }
+        public int ResultId { get; set; }
+        public double Points { get; set; }
+        public ClassTaskStatus Status { get; set; } = ClassTaskStatus.NoSubmission;
+
+        public string YearLevelDisplay => YearLevel switch
+        {
+            1 => "1st Year",
+            2 => "2nd Year",
+            3 => "3rd Year",
+            4 => "4th Year",
+            _ => $"{YearLevel}th Year"
+        };
+    }
+}

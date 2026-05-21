@@ -1,0 +1,235 @@
+@page "/login"
+@layout EmptyLayout
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Features.Helpers
+@inject IUserService UserService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+<style>
+    .login-page-shell {
+        width: 100%;
+        padding: 24px;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f7fa;
+    }
+
+    .login-modal-backdrop {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .login-modal {
+        width: 100%;
+        max-width: 480px;
+        overflow: hidden;
+        border-radius: 16px !important;
+        background: #ffffff;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.08) !important;
+    }
+
+    .login-modal-header {
+        padding: 32px 32px 20px 32px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .login-modal-body {
+        padding: 24px 32px;
+    }
+
+    .login-modal-footer {
+        padding: 24px 32px 32px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .login-icon-wrapper {
+        width: 56px;
+        height: 56px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(88, 106, 234, 0.1);
+        margin-bottom: 16px;
+    }
+
+    @@media (max-width: 600px) {
+        .login-page-shell {
+            padding: 16px;
+        }
+
+        .login-modal-header,
+        .login-modal-body,
+        .login-modal-footer {
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .login-modal-footer {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+</style>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="login-page-shell">
+    <div class="login-modal-backdrop">
+        <MudPaper Elevation="10" Class="login-modal">
+            <div class="login-modal-header">
+                <div class="login-icon-wrapper">
+                    <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Large" Color="Color.Primary" />
+                </div>
+                <MudText Typo="Typo.h4">Welcome Back</MudText>
+                <MudText Typo="Typo.body2" Class="text-secondary">
+                    Sign in to access the Student Management System.
+                </MudText>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mx-6 mb-0 mt-4">@errorMessage</MudAlert>
+            }
+
+            <div class="login-modal-body">
+                <MudForm @ref="form" @bind-IsValid="@success">
+                    <MudTextField @bind-Value="username"
+                                  Label="Username"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Username is required"
+                                  Immediate="true" />
+                    <MudTextField @bind-Value="password"
+                                  Label="Password"
+                                  Variant="Variant.Outlined"
+                                  InputType="@passwordInputType"
+                                  Required="true"
+                                  RequiredError="Password is required"
+                                  Class="mt-4"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@passwordInputIcon"
+                                  OnAdornmentClick="TogglePasswordVisibility"
+                                  AdornmentAriaLabel="Toggle password visibility"
+                                  Immediate="true" />
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Size="Size.Large"
+                               FullWidth="true"
+                               Class="mt-6"
+                               Disabled="@isLoading"
+                               OnClick="LoginAsync">
+                        @if (isLoading)
+                        {
+                            <MudProgressCircular Class="me-2" Size="Size.Small" Indeterminate="true" />
+                            <span>Logging in...</span>
+                        }
+                        else
+                        {
+                            <span>Login</span>
+                        }
+                    </MudButton>
+                </MudForm>
+            </div>
+
+            <div class="login-modal-footer">
+                <MudLink Href="/register">Don't have an account? Register</MudLink>
+            </div>
+        </MudPaper>
+    </div>
+</MudContainer>
+
+<form @ref="loginForm" action="/api/auth/login" method="post" style="display:none;">
+    <input type="hidden" name="username" value="@username" />
+    <input type="hidden" name="password" value="@password" />
+</form>
+
+@code {
+    MudForm form = null!;
+    ElementReference loginForm;
+    bool success;
+    string username = "";
+    string password = "";
+    string? errorMessage;
+    bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/dashboard", forceLoad: true);
+        }
+    }
+
+    bool isShowPassword;
+    InputType passwordInputType = InputType.Password;
+    string passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void TogglePasswordVisibility()
+    {
+        if (isShowPassword)
+        {
+            isShowPassword = false;
+            passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+            passwordInputType = InputType.Password;
+        }
+        else
+        {
+            isShowPassword = true;
+            passwordInputIcon = Icons.Material.Filled.Visibility;
+            passwordInputType = InputType.Text;
+        }
+    }
+
+    [SupplyParameterFromQuery]
+    [Parameter]
+    public string? ReturnUrl { get; set; }
+
+    private async Task LoginAsync()
+    {
+        // Direct validation — avoids MudForm's async IsValid timing issue
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Username and password are required.";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var user = await UserService.AuthenticateAsync(username, password);
+            if (user != null)
+            {
+                // Authenticated successfully in code. 
+                // Now submit the hidden form so the server sets the actual HttpCookie!
+                await JSRuntime.InvokeVoidAsync("HTMLFormElement.prototype.submit.call", loginForm);
+            }
+            else
+            {
+                errorMessage = "Invalid username or password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

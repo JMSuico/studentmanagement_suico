@@ -1,0 +1,41 @@
+<MudNavMenu>
+    <AuthorizeView>
+        <Authorized>
+            <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+            
+            <AuthorizeView Roles="Admin,Teacher,Staff" Context="managementContext">
+                <Authorized>
+                    <MudNavGroup Title="Management" Expanded="true" Icon="@Icons.Material.Filled.Settings">
+                        <MudNavLink Href="/students" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Students</MudNavLink>
+                        <MudNavLink Href="/teachers" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.PersonOutline">Teachers</MudNavLink>
+                        <MudNavLink Href="/classes" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Class">Classes</MudNavLink>
+                    </MudNavGroup>
+                </Authorized>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="Student" Context="studentContext">
+                <Authorized>
+                    <MudNavLink Href="/classes" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Class">Classes</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+
+            <MudNavLink Href="/subjects" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Subjects</MudNavLink>
+            <MudNavLink Href="/enrollments" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AssignmentInd">Enrollment</MudNavLink>
+
+            <MudNavGroup Title="Academics" Expanded="true" Icon="@Icons.Material.Filled.School">
+                <MudNavLink Href="/attendance" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CoPresent">Attendance</MudNavLink>
+                
+                <AuthorizeView Roles="Admin,Teacher" Context="taskContext">
+                    <Authorized>
+                        <MudNavLink Href="/tasks" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assignment">Tasks</MudNavLink>
+                    </Authorized>
+                </AuthorizeView>
+                
+                <MudNavLink Href="/grades" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Grade">Grades</MudNavLink>
+                <MudNavLink Href="/progress" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.TrendingUp">Academic Progress</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavLink Href="/profile" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Person">Profile</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+</MudNavMenu>

@@ -1,0 +1,56 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Helpers
+
+<MudDialog>
+    <DialogContent>
+        @if (Grade != null && Grade.Student != null && Grade.Subject != null)
+        {
+            <div class="d-flex flex-column gap-2 mb-4">
+                <MudText Typo="Typo.h6">@Grade.Student.FirstName @Grade.Student.LastName</MudText>
+                <MudText Typo="Typo.subtitle1">@Grade.Subject.SubjectCode - @Grade.Subject.SubjectName</MudText>
+            </div>
+
+            <MudSimpleTable Style="overflow-x: auto;">
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th>Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Prelim</td>
+                        <td>@(Grade.PrelimGrade?.ToString("0.00") ?? "N/A")</td>
+                    </tr>
+                    <tr>
+                        <td>Midterm</td>
+                        <td>@(Grade.MidtermGrade?.ToString("0.00") ?? "N/A")</td>
+                    </tr>
+                    <tr>
+                        <td>Final</td>
+                        <td>@(Grade.FinalGrade?.ToString("0.00") ?? "N/A")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Overall</strong></td>
+                        <td><strong>@(Grade.OverallGrade?.ToString("0.00") ?? "N/A")</strong></td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <div class="mt-4">
+                <MudText Typo="Typo.subtitle2">Remarks: @GradeHelper.GetGradeRemarks(Grade.OverallGrade)</MudText>
+                <MudText Typo="Typo.subtitle2">Status: @Grade.Status.ToString()</MudText>
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public Grade? Grade { get; set; }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}

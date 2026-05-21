@@ -1,0 +1,395 @@
+@page "/enrollments"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@using System.Security.Claims
+@inject IEnrollmentService EnrollmentService
+@inject IStudentService StudentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IUserService UserService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Enrollments</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Enrollments</MudText>
+        @if (isStudent)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenStudentEnrollmentDialog">Request Enrollment</MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Enrollment</MudButton>
+        }
+    </div>
+
+    <MudTable T="Enrollment" Items="@enrollments" Dense="true" Hover="true" Loading="@isLoading" Striped="true" 
+              Filter="new Func<Enrollment,bool>(FilterFunc)" OnRowClick="OnRowClicked" RowStyle="cursor: pointer;">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchString" Placeholder="Search by Class or Status" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            @if (isStudent)
+            {
+                <MudTh>Subject Code</MudTh>
+                <MudTh>Subject Name</MudTh>
+                <MudTh>Units</MudTh>
+                <MudTh>Year Level</MudTh>
+                <MudTh>Semester</MudTh>
+                <MudTh>School Year</MudTh>
+                <MudTh>Enrollment Status</MudTh>
+                <MudTh>Actions</MudTh>
+            }
+            else
+            {
+                <MudTh>Date</MudTh>
+                <MudTh>Student</MudTh>
+                <MudTh>Class</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            }
+        </HeaderContent>
+        <RowTemplate>
+            @if (isStudent)
+            {
+                <MudTd DataLabel="Subject Code">@(context.ClassSection?.Subject?.SubjectCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Subject Name">@(context.ClassSection?.Subject?.SubjectName ?? "N/A")</MudTd>
+                <MudTd DataLabel="Units">@(context.ClassSection?.Subject?.Units ?? 0)</MudTd>
+                <MudTd DataLabel="Year Level">@FormatYearLevel(context.ClassSection?.Subject?.YearLevel ?? 0)</MudTd>
+                <MudTd DataLabel="Semester">@(context.ClassSection?.Semester ?? "N/A")</MudTd>
+                <MudTd DataLabel="School Year">@(context.ClassSection?.SchoolYear ?? "N/A")</MudTd>
+                <MudTd DataLabel="Enrollment Status">
+                    <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status.ToString()</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <span @onclick:stopPropagation="true">
+                        @if (context.Status == EnrollmentStatus.Pending)
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="@(() => CancelEnrollment(context))">Cancel</MudButton>
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenStudentDetailDialog(context))" />
+                        }
+                    </span>
+                </MudTd>
+            }
+            else
+            {
+                <MudTd DataLabel="Date">@context.EnrollmentDate.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Student">@(context.Student?.FirstName) @(context.Student?.LastName)</MudTd>
+                <MudTd DataLabel="Class">@(context.ClassSection?.ClassName) - @(context.ClassSection?.SectionName)</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status.ToString()</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <span @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                        
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true" Size="Size.Small" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Approved))" Disabled="@(context.Status == EnrollmentStatus.Approved)">Approve Request</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Enrolled))" Disabled="@(context.Status == EnrollmentStatus.Enrolled)">Mark as Enrolled</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Dropped))" Disabled="@(context.Status == EnrollmentStatus.Dropped)">Drop Student</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Completed))" Disabled="@(context.Status == EnrollmentStatus.Completed)">Mark Completed</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Cancelled))" Disabled="@(context.Status == EnrollmentStatus.Cancelled)">Cancel Request</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => UpdateStatus(context, EnrollmentStatus.Rejected))" Disabled="@(context.Status == EnrollmentStatus.Rejected)">Reject Request</MudMenuItem>
+                        </MudMenu>
+                    </span>
+                </MudTd>
+            }
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<Enrollment> enrollments = new List<Enrollment>();
+    private bool isLoading = true;
+    private string searchString = "";
+    
+    private bool isStudent = false;
+    private int currentStudentId = 0;
+    private int currentStudentYearLevel = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isStudent = user.IsInRole("Student");
+
+        if (isStudent)
+        {
+            var idClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (idClaim != null && int.TryParse(idClaim.Value, out int userId))
+            {
+                var userRecord = await UserService.GetUserByIdAsync(userId);
+                if (userRecord != null)
+                {
+                    var studentRecord = (await StudentService.GetAllStudentsAsync()).FirstOrDefault(s => 
+                        s.Email == userRecord.Email || 
+                        (s.FirstName == userRecord.FirstName && s.LastName == userRecord.LastName));
+                    
+                    if (studentRecord != null)
+                    {
+                        currentStudentId = studentRecord.Id;
+                        currentStudentYearLevel = studentRecord.YearLevel;
+                    }
+                }
+            }
+        }
+
+        await LoadEnrollments();
+    }
+
+    private async Task LoadEnrollments()
+    {
+        isLoading = true;
+        if (isStudent)
+        {
+            enrollments = await EnrollmentService.GetStudentEnrollmentsAsync(currentStudentId);
+        }
+        else
+        {
+            enrollments = await EnrollmentService.GetAllEnrollmentsAsync();
+            // Show Pending first for admins
+            enrollments = enrollments.OrderBy(e => e.Status != EnrollmentStatus.Pending).ThenByDescending(e => e.EnrollmentDate);
+        }
+        isLoading = false;
+    }
+
+    private Color GetStatusColor(EnrollmentStatus status)
+    {
+        return status switch
+        {
+            EnrollmentStatus.Pending => Color.Warning,
+            EnrollmentStatus.Enrolled => Color.Success,
+            EnrollmentStatus.Dropped => Color.Error,
+            EnrollmentStatus.Cancelled => Color.Dark,
+            EnrollmentStatus.Completed => Color.Info,
+            EnrollmentStatus.Approved => Color.Primary,
+            EnrollmentStatus.Rejected => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private bool FilterFunc(Enrollment enrollment)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        
+        var studentName = $"{enrollment.Student?.FirstName} {enrollment.Student?.LastName}";
+        if (!isStudent && studentName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var className = $"{enrollment.ClassSection?.ClassName} {enrollment.ClassSection?.SectionName}";
+        if (className.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+            
+        if (enrollment.Status.ToString().Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private async Task OpenStudentEnrollmentDialog()
+    {
+        if (currentStudentId == 0)
+        {
+            Snackbar.Add("Student profile not found. Please complete profile.", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters { ["StudentYearLevel"] = currentStudentYearLevel };
+        var dialog = await DialogService.ShowAsync<StudentEnrollmentDialog>("Request Enrollment", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var classSectionId = (int)result.Data!;
+                await EnrollmentService.EnrollStudentAsync(currentStudentId, classSectionId, "Student requested enrollment", EnrollmentStatus.Pending);
+                Snackbar.Add("Enrollment requested successfully. Waiting for approval.", Severity.Success);
+                await LoadEnrollments();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Enrollment"] = new Enrollment { EnrollmentDate = DateTime.UtcNow, Status = EnrollmentStatus.Enrolled }
+        };
+        var dialog = await DialogService.ShowAsync<EnrollmentFormDialog>("Add Enrollment", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var newEnrollment = (Enrollment)result.Data!;
+            await EnrollmentService.EnrollStudentAsync(newEnrollment.StudentId, newEnrollment.ClassSectionId, newEnrollment.Remarks, newEnrollment.Status);
+            Snackbar.Add("Enrollment added successfully", Severity.Success);
+            await LoadEnrollments();
+        }
+    }
+
+    private async Task OpenEditDialog(Enrollment enrollment)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Enrollment"] = enrollment
+        };
+        var dialog = await DialogService.ShowAsync<EnrollmentFormDialog>("Edit Enrollment", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var updatedEnrollment = (Enrollment)result.Data!;
+            await EnrollmentService.UpdateEnrollmentAsync(updatedEnrollment);
+            Snackbar.Add("Enrollment updated successfully", Severity.Success);
+            await LoadEnrollments();
+        }
+    }
+
+    private async Task ApproveEnrollment(Enrollment enrollment)
+    {
+        enrollment.Status = EnrollmentStatus.Enrolled;
+        await EnrollmentService.UpdateEnrollmentAsync(enrollment);
+        Snackbar.Add("Enrollment approved.", Severity.Success);
+        await LoadEnrollments();
+    }
+
+    private async Task DropStudent(Enrollment enrollment)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to drop {(enrollment.Student?.FirstName)} from {(enrollment.ClassSection?.ClassName)}?",
+            ["ButtonText"] = "Drop",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Drop Student", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await EnrollmentService.DropStudentAsync(enrollment.Id, "Dropped by admin");
+                Snackbar.Add("Student dropped successfully", Severity.Success);
+                await LoadEnrollments();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task CancelEnrollment(Enrollment enrollment)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = "Are you sure you want to cancel this enrollment request?",
+            ["ButtonText"] = "Cancel Enrollment",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Cancel Enrollment", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                enrollment.Status = EnrollmentStatus.Cancelled;
+                enrollment.Remarks = "Cancelled by student";
+                await EnrollmentService.UpdateEnrollmentAsync(enrollment);
+                Snackbar.Add("Enrollment request cancelled.", Severity.Success);
+                await LoadEnrollments();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OnRowClicked(TableRowClickEventArgs<Enrollment> args)
+    {
+        if (isStudent && args.Item != null)
+        {
+            await OpenStudentDetailDialog(args.Item);
+        }
+    }
+
+    private async Task OpenStudentDetailDialog(Enrollment enrollment)
+    {
+        var parameters = new DialogParameters { ["Enrollment"] = enrollment };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<StudentEnrollmentDetailDialog>("Enrollment Request Details", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            await LoadEnrollments();
+        }
+    }
+
+    private string FormatYearLevel(int level)
+    {
+        if (level <= 0) return "N/A";
+        return level switch
+        {
+            1 => "1st Year",
+            2 => "2nd Year",
+            3 => "3rd Year",
+            4 => "4th Year",
+            _ => $"{level}th Year"
+        };
+    }
+
+    private async Task UpdateStatus(Enrollment enrollment, EnrollmentStatus newStatus)
+    {
+        try
+        {
+            enrollment.Status = newStatus;
+            if (newStatus == EnrollmentStatus.Dropped)
+            {
+                enrollment.Remarks = "Dropped by staff/admin";
+            }
+            else if (newStatus == EnrollmentStatus.Rejected)
+            {
+                enrollment.Remarks = "Rejected by staff/admin";
+            }
+            else if (newStatus == EnrollmentStatus.Approved)
+            {
+                enrollment.Remarks = "Approved by staff/admin";
+            }
+            else if (newStatus == EnrollmentStatus.Enrolled)
+            {
+                enrollment.Remarks = "Officially enrolled";
+            }
+
+            await EnrollmentService.UpdateEnrollmentAsync(enrollment);
+            Snackbar.Add($"Enrollment status updated to {newStatus}.", Severity.Success);
+            await LoadEnrollments();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,126 @@
+@using StudentManagement.Features.Data.Models
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <!-- Circular Profile Image Upload Component -->
+            <div class="d-flex flex-column align-center mb-6">
+                <div class="position-relative">
+                    <MudAvatar Style="width:120px; height:120px;" Class="elevation-3">
+                        @if (!string.IsNullOrEmpty(Teacher.ProfileImage))
+                        {
+                            <MudImage Src="@Teacher.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Style="font-size: 5rem;" />
+                        }
+                    </MudAvatar>
+                    <InputFile id="teacherFileInput" OnChange="UploadTeacherImage" hidden accept=".jpg,.jpeg,.png" />
+                    <MudIconButton HtmlTag="label"
+                                   for="teacherFileInput"
+                                   Icon="@Icons.Material.Filled.PhotoCamera"
+                                   Color="Color.Primary"
+                                   Variant="Variant.Filled"
+                                   Class="position-absolute bottom-0 right-0 ma-0"
+                                   Style="border-radius: 50%; transform: translate(15%, 15%); width: 36px; height: 36px; min-width: 36px; z-index: 10;" />
+                </div>
+                @if (isUploading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" Style="max-width: 150px;" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mt-2 text-secondary">Click camera icon to upload profile photo</MudText>
+                }
+            </div>
+
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Teacher.EmployeeNumber" Label="Employee Number" Required="true" />
+                    <MudTextField @bind-Value="Teacher.FirstName" Label="First Name" Required="true" />
+                    <MudTextField @bind-Value="Teacher.LastName" Label="Last Name" Required="true" />
+                    <MudTextField @bind-Value="Teacher.Department" Label="Department" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Teacher.Email" Label="Email" Required="true" InputType="InputType.Email" />
+                    <MudTextField @bind-Value="Teacher.ContactNumber" Label="Contact Number" Required="true" />
+                    <MudTextField @bind-Value="Teacher.Specialization" Label="Specialization" />
+                    <MudSwitch @bind-Value="Teacher.IsActive" Label="Is Active" Color="Color.Primary" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mt-4 mb-2">System Credentials</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4 text-muted">Leave empty to use defaults (Email/Employee Number for username, Employee Number for password).</MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="Teacher.SystemUsername" Label="System Username" HelperText="Custom username for login" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="Teacher.SystemPassword" Label="System Password" InputType="InputType.Password" HelperText="Custom password for login" />
+                        </MudItem>
+                    </MudGrid>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Teacher Teacher { get; set; } = new Teacher { EmployeeNumber = "", FirstName = "", LastName = "", Email = "", ContactNumber = "", Department = "" };
+
+    bool success = true;
+    MudForm form = null!;
+    private bool isUploading;
+
+    private async Task UploadTeacherImage(InputFileChangeEventArgs e)
+    {
+        isUploading = true;
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                if (file.Size > 2 * 1024 * 1024)
+                {
+                    Snackbar.Add("Image size should be less than 2MB", Severity.Warning);
+                    return;
+                }
+
+                var format = file.ContentType;
+                using var stream = file.OpenReadStream(2 * 1024 * 1024);
+                using var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                var buffer = ms.ToArray();
+                Teacher.ProfileImage = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+                Snackbar.Add("Profile photo updated successfully!", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            MudDialog.Close(DialogResult.Ok(Teacher));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,44 @@
+@using StudentManagement.Features.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudText Typo="Typo.h6">@StudentName</MudText>
+            <MudText Typo="Typo.subtitle1">@SubjectName</MudText>
+            
+            <div class="d-flex align-center gap-4 mt-4">
+                <MudNumericField @bind-Value="Grade.PrelimGrade" Label="Prelim" Min="0" Max="100" HideSpinButtons="true" />
+                <MudNumericField @bind-Value="Grade.MidtermGrade" Label="Midterm" Min="0" Max="100" HideSpinButtons="true" />
+                <MudNumericField @bind-Value="Grade.FinalGrade" Label="Final" Min="0" Max="100" HideSpinButtons="true" />
+            </div>
+            
+            <MudTextField @bind-Value="Grade.Remarks" Label="Remarks" Lines="2" Class="mt-4" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save Grades</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Grade Grade { get; set; } = new Grade();
+    [Parameter] public string StudentName { get; set; } = "";
+    [Parameter] public string SubjectName { get; set; } = "";
+
+    bool success = true;
+    MudForm form = null!;
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            MudDialog.Close(DialogResult.Ok(Grade));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

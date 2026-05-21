@@ -1,0 +1,23 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">Do you want to logout?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Logout">Logout</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Logout()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}

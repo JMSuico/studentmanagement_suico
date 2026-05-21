@@ -1,0 +1,126 @@
+@page "/progress"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@attribute [Authorize]
+@using StudentManagement.Features.Services.Interfaces
+@inject IAcademicProgressService AcademicProgressService
+@inject IStudentService StudentService
+@inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Academic Progress</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Academic Progress Tracking</MudText>
+
+    <MudTable Items="@progressRecords" Dense="true" Hover="true" Bordered="true" Striped="true" Loading="@isLoading" LoadingProgressColor="Color.Info" Filter="new Func<ProgressSummary,bool>(FilterFunc)">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Student Progress Overview</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString" Placeholder="Search Student..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Student ID</MudTh>
+            <MudTh>Student Name</MudTh>
+            <MudTh>Year Level</MudTh>
+            <MudTh>Attendance Rate</MudTh>
+            <MudTh>Grade Average</MudTh>
+            <MudTh>Passed</MudTh>
+            <MudTh>Failed</MudTh>
+            <MudTh>Academic Standing</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Student ID">@context.StudentNumber</MudTd>
+            <MudTd DataLabel="Student Name">@context.FullName</MudTd>
+            <MudTd DataLabel="Year Level">@context.YearLevel</MudTd>
+            <MudTd DataLabel="Attendance Rate">
+                <MudProgressLinear Color="@GetAttendanceColor(context.AttendanceRate)" Value="@context.AttendanceRate" Class="my-2" />
+                <MudText Typo="Typo.caption">@context.AttendanceRate.ToString("0.0")%</MudText>
+            </MudTd>
+            <MudTd DataLabel="Grade Average">@context.GradeAverage.ToString("0.00")</MudTd>
+            <MudTd DataLabel="Passed">@context.PassedSubjects</MudTd>
+            <MudTd DataLabel="Failed">@context.FailedSubjects</MudTd>
+            <MudTd DataLabel="Academic Standing">
+                <MudChip T="string" Color="@GetStandingColor(context.Standing)" Size="Size.Small">@context.Standing</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" OnClick="@(() => ViewProgressDetails(context))">View Progress</MudButton>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No student progress records found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private bool isLoading = true;
+    private string searchString = "";
+    private List<ProgressSummary> progressRecords = new();
+    private bool isStudent = false;
+    private int currentStudentId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isStudent = user.IsInRole("Student");
+
+        if (isStudent)
+        {
+            var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                var students = await StudentService.GetAllStudentsAsync();
+                var studentRecord = students.FirstOrDefault(s => s.Email == userEmail);
+                if (studentRecord != null)
+                {
+                    currentStudentId = studentRecord.Id;
+                }
+            }
+        }
+
+        await LoadProgressData();
+    }
+
+    private async Task LoadProgressData()
+    {
+        isLoading = true;
+
+        if (isStudent && currentStudentId > 0)
+        {
+            var summary = await AcademicProgressService.GetStudentProgressAsync(currentStudentId);
+            progressRecords = summary != null ? new List<ProgressSummary> { summary } : new();
+        }
+        else
+        {
+            var summaries = await AcademicProgressService.GetAllProgressSummariesAsync();
+            progressRecords = summaries.ToList();
+        }
+
+        isLoading = false;
+    }
+
+    private bool FilterFunc(ProgressSummary summary)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (summary.FullName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (summary.StudentNumber.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private Color GetAttendanceColor(double rate) => rate >= 90 ? Color.Success : rate >= 80 ? Color.Warning : Color.Error;
+    private Color GetStandingColor(string standing) => standing == "Excellent" ? Color.Success : standing == "Good" ? Color.Info : standing == "Needs Improvement" ? Color.Error : Color.Default;
+
+    private async Task ViewProgressDetails(ProgressSummary summary)
+    {
+        var parameters = new DialogParameters<StudentManagement.Components.Shared.AcademicProgressDialog> { { x => x.Summary, summary } };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<StudentManagement.Components.Shared.AcademicProgressDialog>("Progress Details", parameters, options);
+    }
+}

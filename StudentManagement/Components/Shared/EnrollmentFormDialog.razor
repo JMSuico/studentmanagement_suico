@@ -1,0 +1,71 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@inject IStudentService StudentService
+@inject IClassSectionService ClassSectionService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudSelect T="int" @bind-Value="Enrollment.StudentId" Label="Student" Required="true">
+                @foreach(var student in students)
+                {
+                    <MudSelectItem Value="@student.Id">@student.FirstName @student.LastName (@student.StudentNumber)</MudSelectItem>
+                }
+            </MudSelect>
+            
+            <MudSelect T="int" @bind-Value="Enrollment.ClassSectionId" Label="Class / Section" Required="true">
+                @foreach(var cls in classSections)
+                {
+                    <MudSelectItem Value="@cls.Id">@cls.ClassName - @cls.SectionName</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudDatePicker @bind-Date="enrollmentDate" Label="Enrollment Date" Required="true" />
+            
+            <MudSelect T="EnrollmentStatus" @bind-Value="Enrollment.Status" Label="Status" Required="true">
+                @foreach (EnrollmentStatus status in Enum.GetValues(typeof(EnrollmentStatus)))
+                {
+                    <MudSelectItem Value="@status">@status.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Enrollment Enrollment { get; set; } = new Enrollment();
+
+    private IEnumerable<Student> students = new List<Student>();
+    private IEnumerable<ClassSection> classSections = new List<ClassSection>();
+    
+    private DateTime? enrollmentDate;
+
+    bool success = true;
+    MudForm form = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        students = await StudentService.GetAllStudentsAsync();
+        classSections = await ClassSectionService.GetAllClassesAsync();
+        enrollmentDate = Enrollment.EnrollmentDate == default ? DateTime.Today : Enrollment.EnrollmentDate;
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            Enrollment.EnrollmentDate = enrollmentDate ?? DateTime.UtcNow;
+            MudDialog.Close(DialogResult.Ok(Enrollment));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

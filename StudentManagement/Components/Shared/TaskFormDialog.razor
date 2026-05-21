@@ -1,0 +1,51 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudTextField @bind-Value="ClassTask.Title" Label="Title" Required="true" />
+            <MudTextField @bind-Value="ClassTask.Description" Label="Description" Lines="3" />
+            <MudSelect T="TaskCategory" @bind-Value="ClassTask.Category" Label="Category" Required="true">
+                @foreach (TaskCategory cat in Enum.GetValues(typeof(TaskCategory)))
+                {
+                    <MudSelectItem Value="@cat">@cat.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField @bind-Value="ClassTask.MaxPoints" Label="Max Points" Min="1" Required="true" />
+            <MudDatePicker @bind-Date="deadline" Label="Deadline" Required="true" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public ClassTask ClassTask { get; set; } = new ClassTask() { Title = "" };
+
+    private DateTime? deadline;
+
+    bool success = true;
+    MudForm form = null!;
+
+    protected override void OnInitialized()
+    {
+        deadline = ClassTask.Deadline == default ? DateTime.Today.AddDays(7) : ClassTask.Deadline;
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            ClassTask.Deadline = deadline ?? DateTime.Today.AddDays(7);
+            MudDialog.Close(DialogResult.Ok(ClassTask));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,488 @@
+@page "/"
+@page "/dashboard"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IUserService UserService
+@inject IStudentService StudentService
+@inject ITeacherService TeacherService
+@inject ISubjectService SubjectService
+@inject IClassSectionService ClassSectionService
+@inject IEnrollmentService EnrollmentService
+@inject IAttendanceService AttendanceService
+@inject IGradeService GradeService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 pb-8">
+    <MudText Typo="Typo.h4" Class="mb-1">Dashboard</MudText>
+    <MudText Typo="Typo.body2" Class="text-secondary mb-6">Welcome back, @currentUserName. Here's an overview of your system.</MudText>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-center mt-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        </div>
+    }
+    else
+    {
+        <!-- STUDENT VIEW: Limited academic summary -->
+        <AuthorizeView Roles="Student" Context="studentContext">
+            <Authorized>
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Info" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.School" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">My Enrollments</MudText>
+                                    <MudText Typo="Typo.h5">@studentEnrollmentCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Success" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.Grade" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">My Grades</MudText>
+                                    <MudText Typo="Typo.h5">@studentGradeCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Warning" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.CoPresent" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Attendance Records</MudText>
+                                    <MudText Typo="Typo.h5">@studentAttendanceCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudPaper Elevation="2" Class="pa-6 d-flex flex-column align-center justify-center" Style="min-height:180px;">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                            <MudText Typo="Typo.h6">Academic Summary</MudText>
+                            <MudText Typo="Typo.body2" Class="text-secondary mt-1">Visit the Academic Progress page for your detailed performance report.</MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-3" Href="/progress">View My Progress</MudButton>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </Authorized>
+        </AuthorizeView>
+
+        <!-- ADMIN / INSTRUCTOR VIEW: Full overview -->
+        <AuthorizeView Roles="Admin,Teacher,Staff" Context="adminContext">
+            <Authorized>
+                <!-- Summary Cards Row -->
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Primary" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.People" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Total Students</MudText>
+                                    <MudText Typo="Typo.h5">@totalStudents</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Secondary" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.PersonOutline" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Total Instructors</MudText>
+                                    <MudText Typo="Typo.h5">@totalTeachers</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Info" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Total Admins</MudText>
+                                    <MudText Typo="Typo.h5">@totalAdmins</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Tertiary" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.Class" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Total Classes</MudText>
+                                    <MudText Typo="Typo.h5">@totalClasses</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Second row of cards -->
+                <MudGrid Class="mt-2">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Dark" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.MenuBook" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Total Subjects</MudText>
+                                    <MudText Typo="Typo.h5">@totalSubjects</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Success" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.AssignmentInd" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Enrolled Students</MudText>
+                                    <MudText Typo="Typo.h5">@totalEnrolled</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Warning" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.CoPresent" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Attendance Records</MudText>
+                                    <MudText Typo="Typo.h5">@totalAttendances</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Error" Variant="Variant.Filled"><MudIcon Icon="@Icons.Material.Filled.Grade" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Grades Recorded</MudText>
+                                    <MudText Typo="Typo.h5">@totalGrades</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Attendance Status Breakdown -->
+                <MudGrid Class="mt-2">
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Success" Variant="Variant.Outlined"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Present</MudText>
+                                    <MudText Typo="Typo.h5">@presentCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Error" Variant="Variant.Outlined"><MudIcon Icon="@Icons.Material.Filled.Cancel" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Absent</MudText>
+                                    <MudText Typo="Typo.h5">@absentCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Color="Color.Warning" Variant="Variant.Outlined"><MudIcon Icon="@Icons.Material.Filled.Schedule" /></MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">Late</MudText>
+                                    <MudText Typo="Typo.h5">@lateCount</MudText>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Quick Action Buttons -->
+                <MudPaper Elevation="2" Class="pa-4 mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+                    <div class="d-flex flex-wrap gap-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" Href="/students">Add Student</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.MenuBook" Href="/subjects">Add Subject</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.PersonOutline" Href="/teachers">Add Teacher</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.AssignmentInd" Href="/enrollments">Add Enrollment</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.CoPresent" Href="/attendance">View Attendance</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Grade" Href="/grades">View Grades</MudButton>
+                    </div>
+                </MudPaper>
+
+                <!-- Recent Records -->
+                <MudGrid Class="mt-4">
+                    <!-- Recent Enrolled Students -->
+                    <MudItem xs="12" md="6">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">Recent Enrollments</MudText>
+                            @if (recentEnrollments.Any())
+                            {
+                                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
+                                    <thead>
+                                        <tr>
+                                            <th>Student</th>
+                                            <th>Class</th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var enrollment in recentEnrollments)
+                                        {
+                                            <tr>
+                                                <td>@enrollment.Student?.FirstName @enrollment.Student?.LastName</td>
+                                                <td>@enrollment.ClassSection?.ClassName</td>
+                                                <td>@enrollment.EnrollmentDate.ToString("MMM dd")</td>
+                                                <td><MudChip T="string" Color="Color.Primary" Size="Size.Small">@enrollment.Status.ToString()</MudChip></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No enrollment records yet.</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+
+                    <!-- Recent Attendance Records -->
+                    <MudItem xs="12" md="6">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">Recent Attendance</MudText>
+                            @if (recentAttendances.Any())
+                            {
+                                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
+                                    <thead>
+                                        <tr>
+                                            <th>Student</th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var attendance in recentAttendances)
+                                        {
+                                            <tr>
+                                                <td>@attendance.Student?.FirstName @attendance.Student?.LastName</td>
+                                                <td>@attendance.Date.ToString("MMM dd")</td>
+                                                <td>
+                                                    <MudChip T="string" Color="@GetAttendanceStatusColor(attendance.Status)" Size="Size.Small">@attendance.Status.ToString()</MudChip>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No attendance records yet.</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+
+                    <!-- Recent Grade Updates -->
+                    <MudItem xs="12">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Class="mb-3">Recent Grade Updates</MudText>
+                            @if (recentGrades.Any())
+                            {
+                                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
+                                    <thead>
+                                        <tr>
+                                            <th>Student</th>
+                                            <th>Subject</th>
+                                            <th>Overall</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var grade in recentGrades)
+                                        {
+                                            <tr>
+                                                <td>@grade.Student?.FirstName @grade.Student?.LastName</td>
+                                                <td>@grade.Subject?.SubjectCode</td>
+                                                <td>@(grade.OverallGrade?.ToString("0.00") ?? "-")</td>
+                                                <td><MudChip T="string" Color="Color.Info" Size="Size.Small">@grade.Status.ToString()</MudChip></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No grade records yet.</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </Authorized>
+        </AuthorizeView>
+    }
+</MudContainer>
+
+@code {
+    private bool isLoading = true;
+    private string currentUserName = "";
+    private UserRole currentUserRole;
+
+    // Summary counts for Admin/Instructor
+    private int totalStudents;
+    private int totalTeachers;
+    private int totalAdmins;
+    private int totalClasses;
+    private int totalSubjects;
+    private int totalEnrolled;
+    private int totalAttendances;
+    private int totalGrades;
+    private int presentCount;
+    private int absentCount;
+    private int lateCount;
+
+    // Student-specific counts
+    private int studentEnrollmentCount;
+    private int studentGradeCount;
+    private int studentAttendanceCount;
+
+    // Recent records for Admin/Instructor
+    private List<Enrollment> recentEnrollments = new();
+    private List<Attendance> recentAttendances = new();
+    private List<Grade> recentGrades = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        isLoading = true;
+
+        try
+        {
+            // Get current user info
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userPrincipal = authState.User;
+
+            if (userPrincipal.Identity?.IsAuthenticated == true)
+            {
+                currentUserName = userPrincipal.Identity.Name ?? "User";
+                var roleClaim = userPrincipal.FindFirst(System.Security.Claims.ClaimTypes.Role);
+                if (roleClaim != null)
+                {
+                    Enum.TryParse<UserRole>(roleClaim.Value, out currentUserRole);
+                }
+
+                if (currentUserRole == UserRole.Student)
+                {
+                    // Student sees their own data only
+                    var idClaim = userPrincipal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+                    if (idClaim != null && int.TryParse(idClaim.Value, out int userId))
+                    {
+                        // Find the student record linked to this user
+                        var user = await UserService.GetUserByIdAsync(userId);
+                        if (user != null)
+                        {
+                            var allStudents = await StudentService.GetAllStudentsAsync();
+                            var myStudent = allStudents.FirstOrDefault(s =>
+                                s.Email == user.Email ||
+                                (s.FirstName == user.FirstName && s.LastName == user.LastName));
+
+                            if (myStudent != null)
+                            {
+                                var myEnrollments = await EnrollmentService.GetStudentEnrollmentsAsync(myStudent.Id);
+                                studentEnrollmentCount = myEnrollments.Count();
+
+                                var myGrades = await GradeService.GetStudentGradesAsync(myStudent.Id);
+                                studentGradeCount = myGrades.Count();
+
+                                var myAttendances = await AttendanceService.GetStudentAttendancesAsync(myStudent.Id);
+                                studentAttendanceCount = myAttendances.Count();
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Admin/Instructor/Staff see full system overview
+                    var students = await StudentService.GetAllStudentsAsync();
+                    totalStudents = students.Count();
+
+                    var teachers = await TeacherService.GetAllTeachersAsync();
+                    totalTeachers = teachers.Count();
+
+                    var users = await UserService.GetAllUsersAsync();
+                    totalAdmins = users.Count(u => u.Role == UserRole.Admin);
+
+                    var classes = await ClassSectionService.GetAllClassesAsync();
+                    totalClasses = classes.Count();
+
+                    var subjects = await SubjectService.GetAllSubjectsAsync();
+                    totalSubjects = subjects.Count();
+
+                    var enrollments = await EnrollmentService.GetAllEnrollmentsAsync();
+                    var enrollmentList = enrollments.ToList();
+                    totalEnrolled = enrollmentList.Count;
+                    recentEnrollments = enrollmentList
+                        .OrderByDescending(e => e.EnrollmentDate)
+                        .Take(5)
+                        .ToList();
+
+                    var attendances = await AttendanceService.GetAllAttendancesAsync();
+                    var attendanceList = attendances.ToList();
+                    totalAttendances = attendanceList.Count;
+                    presentCount = attendanceList.Count(a => a.Status == AttendanceStatus.Present);
+                    absentCount = attendanceList.Count(a => a.Status == AttendanceStatus.Absent);
+                    lateCount = attendanceList.Count(a => a.Status == AttendanceStatus.Late);
+                    recentAttendances = attendanceList
+                        .OrderByDescending(a => a.Date)
+                        .Take(5)
+                        .ToList();
+
+                    var grades = await GradeService.GetAllGradesAsync();
+                    var gradeList = grades.ToList();
+                    totalGrades = gradeList.Count;
+                    recentGrades = gradeList
+                        .OrderByDescending(g => g.Id)
+                        .Take(5)
+                        .ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Dashboard load error: {ex.Message}");
+        }
+
+        isLoading = false;
+    }
+
+    private Color GetAttendanceStatusColor(AttendanceStatus status) => status switch
+    {
+        AttendanceStatus.Present => Color.Success,
+        AttendanceStatus.Absent => Color.Error,
+        AttendanceStatus.Late => Color.Warning,
+        AttendanceStatus.Excused => Color.Info,
+        _ => Color.Default
+    };
+}

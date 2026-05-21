@@ -1,0 +1,160 @@
+@page "/tasks"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin,Teacher")]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject ITaskService TaskService
+@inject ISubjectService SubjectService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Task Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Class Tasks</MudText>
+        <div class="d-flex gap-4 align-center">
+            <MudSelect T="int" @bind-Value="subjectId" Label="Select Subject">
+                @foreach (var sub in subjects)
+                {
+                    <MudSelectItem Value="@sub.Id">@sub.SubjectCode - @sub.SubjectName</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadTasks" Disabled="@(subjectId == 0)">Load</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog" Disabled="@(subjectId == 0)">Add Task</MudButton>
+        </div>
+    </div>
+
+    @if (subjectId > 0 && isLoaded)
+    {
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+            @foreach (TaskCategory category in Enum.GetValues(typeof(TaskCategory)))
+            {
+                <MudTabPanel Text="@category.ToString()">
+                    <MudTable Items="@GetTasksByCategory(category)" Dense="true" Hover="true" Striped="true">
+                        <HeaderContent>
+                            <MudTh>Title</MudTh>
+                            <MudTh>Description</MudTh>
+                            <MudTh>Max Points</MudTh>
+                            <MudTh>Date Assigned</MudTh>
+                            <MudTh>Due Date</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Title">@context.Title</MudTd>
+                            <MudTd DataLabel="Description">@context.Description</MudTd>
+                            <MudTd DataLabel="Max Points">@context.MaxPoints</MudTd>
+                            <MudTd DataLabel="Date Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+                            <MudTd DataLabel="Deadline">@context.Deadline.ToString("yyyy-MM-dd")</MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Grading" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenScoreDialog(context))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteTask(context))" />
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudText>No tasks found in this category.</MudText>
+                        </NoRecordsContent>
+                    </MudTable>
+                </MudTabPanel>
+            }
+        </MudTabs>
+    }
+    else if (isLoaded)
+    {
+        <MudText Typo="Typo.h6" Class="text-center mt-8">Please select a subject to manage tasks.</MudText>
+    }
+</MudContainer>
+
+@code {
+    private IEnumerable<Subject> subjects = new List<Subject>();
+    private IEnumerable<ClassTask> tasks = new List<ClassTask>();
+    private int subjectId = 0;
+    private bool isLoaded = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        subjects = await SubjectService.GetAllSubjectsAsync();
+        if (subjects.Any())
+        {
+            subjectId = subjects.First().Id;
+            await LoadTasks();
+        }
+    }
+
+    private async Task LoadTasks()
+    {
+        if (subjectId == 0) return;
+        tasks = await TaskService.GetTasksBySubjectAsync(subjectId);
+        isLoaded = true;
+    }
+
+    private IEnumerable<ClassTask> GetTasksByCategory(TaskCategory category)
+    {
+        return tasks.Where(t => t.Category == category).ToList();
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["ClassTask"] = new ClassTask { SubjectId = subjectId, Title = "", Deadline = DateTime.Today.AddDays(7) }
+        };
+        var dialog = await DialogService.ShowAsync<TaskFormDialog>("Create Task", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var newTask = (ClassTask)result.Data!;
+            await TaskService.CreateTaskAsync(newTask);
+            Snackbar.Add("Task created successfully.", Severity.Success);
+            await LoadTasks();
+        }
+    }
+
+    private async Task OpenEditDialog(ClassTask task)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ClassTask"] = task
+        };
+        var dialog = await DialogService.ShowAsync<TaskFormDialog>("Edit Task", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            var updatedTask = (ClassTask)result.Data!;
+            await TaskService.UpdateTaskAsync(updatedTask);
+            Snackbar.Add("Task updated successfully.", Severity.Success);
+            await LoadTasks();
+        }
+    }
+
+    private async Task DeleteTask(ClassTask task)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {task.Title}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Task", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            await TaskService.DeleteTaskAsync(task.Id);
+            Snackbar.Add("Task deleted.", Severity.Success);
+            await LoadTasks();
+        }
+    }
+
+    private void OpenScoreDialog(ClassTask task)
+    {
+        Navigation.NavigateTo($"/tasks/score/{task.Id}");
+    }
+}

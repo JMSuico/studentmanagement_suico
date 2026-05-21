@@ -1,0 +1,346 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@inject ISubjectService SubjectService
+@inject ITeacherService TeacherService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog Style="max-width: 700px;">
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="ClassSection.ClassName" Label="Class Name" Required="true" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="ClassSection.SectionName" Label="Section" Required="true" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("A")">A</MudSelectItem>
+                        <MudSelectItem Value="@("B")">B</MudSelectItem>
+                        <MudSelectItem Value="@("C")">C</MudSelectItem>
+                        <MudSelectItem Value="@("D")">D</MudSelectItem>
+                        <MudSelectItem Value="@("E")">E</MudSelectItem>
+                        <MudSelectItem Value="@("F")">F</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="ClassSection.SchoolYear" Label="Academic Year" Required="true" Variant="Variant.Outlined">
+                        @foreach (var year in schoolYearOptions)
+                        {
+                            <MudSelectItem Value="@year">@year</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="ClassSection.Semester" Label="Semester" Required="true" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("1st Semester")">1st Semester</MudSelectItem>
+                        <MudSelectItem Value="@("2nd Semester")">2nd Semester</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" @bind-Value="ClassSection.SubjectId" Label="Subject" Required="true" Variant="Variant.Outlined">
+                        @foreach (var subject in subjects)
+                        {
+                            <MudSelectItem Value="@subject.Id">@subject.SubjectCode - @subject.SubjectName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <div class="d-flex align-end gap-1">
+                        <MudSelect T="int" @bind-Value="ClassSection.TeacherId" Label="Adviser/Instructor" Required="true" Variant="Variant.Outlined" Class="flex-grow-1">
+                            @foreach (var teacher in teachers)
+                            {
+                                <MudSelectItem Value="@teacher.Id">@teacher.FirstName @teacher.LastName</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <div class="d-flex mb-1">
+                            <MudTooltip Text="Add Teacher">
+                                <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Medium" OnClick="OpenCreateTeacherDialog" />
+                            </MudTooltip>
+                            <MudTooltip Text="Edit Selected Teacher">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Medium" OnClick="OpenEditTeacherDialog" Disabled="@(ClassSection.TeacherId <= 0)" Class="ml-1" />
+                            </MudTooltip>
+                        </div>
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="ClassSection.Schedule" Label="Schedule Period" Required="true" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("Morning (A.M.)")">Morning (A.M.)</MudSelectItem>
+                        <MudSelectItem Value="@("Afternoon (P.M.)")">Afternoon (P.M.)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTextField @bind-Value="ClassSection.Room" Label="Room" Required="true" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudNumericField @bind-Value="ClassSection.MaxCapacity" Label="Capacity" Required="true" Min="1" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect T="ClassStatus" @bind-Value="ClassSection.Status" Label="Status" Required="true" Variant="Variant.Outlined">
+                        @foreach (ClassStatus status in Enum.GetValues(typeof(ClassStatus)))
+                        {
+                            <MudSelectItem Value="@status">@status.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            @* ── Schedule Entries ── *@
+            <MudDivider Class="my-4" />
+            <div class="d-flex justify-space-between align-center mb-2">
+                <MudText Typo="Typo.h6">Schedules</MudText>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="AddScheduleEntry">
+                    Add Schedule
+                </MudButton>
+            </div>
+
+            @if (scheduleEntries.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                    No schedules added yet. Click "Add Schedule" to create one.
+                </MudAlert>
+            }
+            else
+            {
+                @foreach (var (entry, index) in scheduleEntries.Select((e, i) => (e, i)))
+                {
+                    <MudPaper Elevation="1" Class="pa-3 mb-3" Style="border-left: 3px solid var(--mud-palette-primary);">
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudDatePicker Date="entry.Date" Label="Date (MM/DD/YYYY)"
+                                               DateFormat="MM/dd/yyyy" Editable="true" Variant="Variant.Outlined"
+                                               DateChanged="@((DateTime? d) => OnDateChanged(entry, d))" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="DayOfWeek" @bind-Value="entry.Day" Label="Day" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="DayOfWeek.Monday">Monday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Tuesday">Tuesday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Wednesday">Wednesday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Thursday">Thursday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Friday">Friday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Saturday">Saturday</MudSelectItem>
+                                    <MudSelectItem Value="DayOfWeek.Sunday">Sunday</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudCheckBox T="bool" @bind-Value="entry.WeeklyRepeat" Label="Repeat Weekly"
+                                             Color="Color.Primary" />
+                            </MudItem>
+                            <MudItem xs="12" sm="5">
+                                <MudTimePicker @bind-Time="entry.StartTime" Label="Start Time"
+                                               AmPm="true" Editable="true" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="5">
+                                <MudTimePicker @bind-Time="entry.EndTime" Label="End Time"
+                                               AmPm="true" Editable="true" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="2" Class="d-flex align-center justify-center">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                               Size="Size.Medium" OnClick="@(() => RemoveScheduleEntry(index))" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                }
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public ClassSection ClassSection { get; set; } = new ClassSection
+    {
+        ClassName = "", SectionName = "", SchoolYear = "", Semester = "", Schedule = "", Room = ""
+    };
+
+    private IEnumerable<Subject> subjects = new List<Subject>();
+    private IEnumerable<Teacher> teachers = new List<Teacher>();
+    private List<string> schoolYearOptions = new();
+    private List<ScheduleEntry> scheduleEntries = new();
+
+    bool success = true;
+    MudForm form = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        subjects = await SubjectService.GetAllSubjectsAsync();
+        teachers = await TeacherService.GetAllTeachersAsync();
+        BuildSchoolYearOptions();
+
+        // Load existing schedules into the editor (for Edit mode)
+        if (ClassSection.Schedules.Any())
+        {
+            scheduleEntries = ClassSection.Schedules.Select(s => new ScheduleEntry
+            {
+                Date = s.ScheduleDate,
+                Day = s.DayOfWeek,
+                StartTime = s.StartTime,
+                EndTime = s.EndTime,
+                WeeklyRepeat = s.IsWeeklyRepeat
+            }).ToList();
+        }
+    }
+
+    private void BuildSchoolYearOptions()
+    {
+        int currentYear = DateTime.Now.Year;
+        schoolYearOptions = new List<string>
+        {
+            $"{currentYear - 1} - {currentYear}",
+            $"{currentYear} - {currentYear + 1}",
+            $"{currentYear + 1} - {currentYear + 2}"
+        };
+    }
+
+    private void AddScheduleEntry()
+    {
+        var today = DateTime.Today;
+        scheduleEntries.Add(new ScheduleEntry
+        {
+            Date = today,
+            Day = today.DayOfWeek,
+            StartTime = new TimeSpan(8, 0, 0),
+            EndTime = new TimeSpan(9, 0, 0),
+            WeeklyRepeat = false
+        });
+    }
+
+    private void RemoveScheduleEntry(int index)
+    {
+        if (index >= 0 && index < scheduleEntries.Count)
+            scheduleEntries.RemoveAt(index);
+    }
+
+    private void OnDateChanged(ScheduleEntry entry, DateTime? newDate)
+    {
+        if (newDate.HasValue)
+        {
+            entry.Date = newDate.Value;
+            entry.Day = newDate.Value.DayOfWeek; // auto-populate day
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            // Convert schedule entries to ClassSchedule entities
+            ClassSection.Schedules = scheduleEntries.Select(e => new ClassSchedule
+            {
+                ScheduleDate = e.Date ?? DateTime.Today,
+                DayOfWeek = e.Day,
+                StartTime = NormalizeTime(e.StartTime),
+                EndTime = NormalizeTime(e.EndTime),
+                IsWeeklyRepeat = e.WeeklyRepeat
+            }).ToList();
+
+            // Also set legacy StartTime/EndTime from first schedule entry
+            if (scheduleEntries.Any())
+            {
+                ClassSection.StartTime = NormalizeTime(scheduleEntries[0].StartTime);
+                ClassSection.EndTime = NormalizeTime(scheduleEntries[0].EndTime);
+            }
+
+            MudDialog.Close(DialogResult.Ok(ClassSection));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task OpenCreateTeacherDialog()
+    {
+        var dialog = await DialogService.ShowAsync<TeacherFormDialog>("Create Teacher");
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var newTeacher = (Teacher)result.Data!;
+                await TeacherService.CreateTeacherAsync(newTeacher);
+                Snackbar.Add("Teacher created successfully", Severity.Success);
+                
+                // Refresh list of teachers
+                teachers = await TeacherService.GetAllTeachersAsync();
+                
+                // Auto-select the newly created teacher
+                ClassSection.TeacherId = newTeacher.Id;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditTeacherDialog()
+    {
+        if (ClassSection.TeacherId <= 0) return;
+        
+        var teacherToEdit = await TeacherService.GetTeacherByIdAsync(ClassSection.TeacherId);
+        if (teacherToEdit == null)
+        {
+            Snackbar.Add("Selected teacher not found", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters { ["Teacher"] = teacherToEdit };
+        var dialog = await DialogService.ShowAsync<TeacherFormDialog>("Edit Teacher", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var updatedTeacher = (Teacher)result.Data!;
+                await TeacherService.UpdateTeacherAsync(updatedTeacher);
+                Snackbar.Add("Teacher updated successfully", Severity.Success);
+                
+                // Refresh list of teachers
+                teachers = await TeacherService.GetAllTeachersAsync();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Normalizes a TimeSpan input to ensure valid HH:mm:ss format.
+    /// Corrects short-form inputs: 9:00 → 09:00:00, 8:00 → 08:00:00, etc.
+    /// </summary>
+    private static TimeSpan NormalizeTime(TimeSpan? time)
+    {
+        if (!time.HasValue)
+            return TimeSpan.Zero;
+
+        var t = time.Value;
+        // Clamp to valid time-of-day range
+        if (t.TotalHours < 0)
+            return TimeSpan.Zero;
+        if (t.TotalHours >= 24)
+            return new TimeSpan(t.Hours, t.Minutes, t.Seconds);
+
+        return new TimeSpan(t.Hours, t.Minutes, t.Seconds);
+    }
+
+    // ── View model for schedule editor rows ──
+    private class ScheduleEntry
+    {
+        public DateTime? Date { get; set; }
+        public DayOfWeek Day { get; set; }
+        public TimeSpan? StartTime { get; set; }
+        public TimeSpan? EndTime { get; set; }
+        public bool WeeklyRepeat { get; set; }
+    }
+}

@@ -1,0 +1,66 @@
+@using StudentManagement.Features.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        @if (Teacher != null)
+        {
+            <div class="d-flex flex-column align-center mb-4 mt-2">
+                <MudAvatar Style="width:100px; height:100px;" Class="elevation-3 mb-2">
+                    @if (!string.IsNullOrEmpty(Teacher.ProfileImage))
+                    {
+                        <MudImage Src="@Teacher.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Style="font-size: 4rem;" />
+                    }
+                </MudAvatar>
+                <MudText Typo="Typo.h5">@Teacher.FirstName @Teacher.LastName</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">@Teacher.Department Department</MudText>
+            </div>
+            <MudDivider Class="mb-4" />
+            <MudList T="string" ReadOnly="true">
+                <MudListItem Icon="@Icons.Material.Filled.Badge">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.caption">Employee Number</MudText>
+                        <MudText Typo="Typo.body1">@Teacher.EmployeeNumber</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Email">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.caption">Email Address</MudText>
+                        <MudText Typo="Typo.body1">@Teacher.Email</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Phone">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.caption">Contact Number</MudText>
+                        <MudText Typo="Typo.body1">@Teacher.ContactNumber</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Star">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.caption">Specialization</MudText>
+                        <MudText Typo="Typo.body1">@(string.IsNullOrEmpty(Teacher.Specialization) ? "N/A" : Teacher.Specialization)</MudText>
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Info">
+                    <div class="d-flex flex-column">
+                        <MudText Typo="Typo.caption">Status</MudText>
+                        <MudText Typo="Typo.body1">@(Teacher.IsActive ? "Active" : "Inactive")</MudText>
+                    </div>
+                </MudListItem>
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public Teacher? Teacher { get; set; }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}

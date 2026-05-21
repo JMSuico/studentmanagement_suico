@@ -1,0 +1,163 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <!-- Circular Profile Image Upload Component -->
+            <div class="d-flex flex-column align-center mb-6">
+                <div class="position-relative">
+                    <MudAvatar Style="width:120px; height:120px;" Class="elevation-3">
+                        @if (!string.IsNullOrEmpty(User.ProfileImage))
+                        {
+                            <MudImage Src="@User.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                        }
+                        else
+                        {
+                            <MudAvatar Color="Color.Primary" Style="width:100%; height:100%; font-size:3rem;">
+                                @User.FirstName.FirstOrDefault()
+                            </MudAvatar>
+                        }
+                    </MudAvatar>
+                    <InputFile id="profileFileInput" OnChange="UploadProfileImage" hidden accept=".jpg,.jpeg,.png" />
+                    <MudIconButton HtmlTag="label"
+                                   for="profileFileInput"
+                                   Icon="@Icons.Material.Filled.PhotoCamera"
+                                   Color="Color.Primary"
+                                   Variant="Variant.Filled"
+                                   Class="position-absolute bottom-0 right-0 ma-0"
+                                   Style="border-radius: 50%; transform: translate(15%, 15%); width: 36px; height: 36px; min-width: 36px; z-index: 10;" />
+                </div>
+                @if (isUploading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" Style="max-width: 150px;" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mt-2 text-secondary">Click camera icon to upload profile photo</MudText>
+                }
+            </div>
+
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="User.FirstName" Label="First Name" Required="true" Variant="Variant.Outlined" Class="mb-3" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="User.LastName" Label="Last Name" Required="true" Variant="Variant.Outlined" Class="mb-3" />
+                </MudItem>
+            </MudGrid>
+
+            <MudTextField @bind-Value="User.Username" Label="Username" ReadOnly="true" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="User.Email" Label="Email" Required="true" Variant="Variant.Outlined" Class="mb-3" />
+            
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="User.Location" Label="Location" Variant="Variant.Outlined" Class="mb-3" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="User.PhoneNumber" Label="Phone Number" Variant="Variant.Outlined" Class="mb-3" />
+                </MudItem>
+            </MudGrid>
+
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Change Password (Optional)</MudText>
+            
+            <MudTextField @bind-Value="currentPassword" Label="Current Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="newPassword" Label="New Password" InputType="InputType.Password" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="confirmPassword" Label="Confirm Password" InputType="InputType.Password" Validation="@(new Func<string, string>(PasswordMatch))" Variant="Variant.Outlined" Class="mb-3" />
+
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!success)">Update</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    
+    [Parameter] public StudentManagement.Features.Data.Models.User User { get; set; } = null!;
+
+    @inject StudentManagement.Features.Services.Interfaces.IUserService UserService
+    @inject ISnackbar Snackbar
+
+    private MudForm form = null!;
+    private bool success;
+    private bool isUploading;
+
+    private string currentPassword = "";
+    private string newPassword = "";
+    private string confirmPassword = "";
+
+    private string PasswordMatch(string arg)
+    {
+        if (newPassword != arg)
+            return "Passwords do not match";
+        return null!;
+    }
+
+    private async Task UploadProfileImage(InputFileChangeEventArgs e)
+    {
+        isUploading = true;
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                if (file.Size > 2 * 1024 * 1024)
+                {
+                    Snackbar.Add("Image size should be less than 2MB", Severity.Warning);
+                    return;
+                }
+
+                var format = file.ContentType;
+                using var stream = file.OpenReadStream(2 * 1024 * 1024);
+                using var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                var buffer = ms.ToArray();
+                User.ProfileImage = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+                Snackbar.Add("Profile photo updated successfully!", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Save()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            try
+            {
+                await UserService.UpdateUserAsync(User);
+                
+                if (!string.IsNullOrEmpty(newPassword))
+                {
+                    if (string.IsNullOrEmpty(currentPassword))
+                    {
+                        Snackbar.Add("Current password is required to set a new password.", Severity.Warning);
+                        return;
+                    }
+                    await UserService.ChangePasswordAsync(User.Id, currentPassword, newPassword);
+                }
+
+                Snackbar.Add("Profile updated successfully", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating profile: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

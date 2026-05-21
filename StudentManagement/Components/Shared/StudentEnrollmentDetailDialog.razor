@@ -1,0 +1,191 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@inject IEnrollmentService EnrollmentService
+@inject ISnackbar Snackbar
+
+<MudDialog Style="max-width: 600px; width: 100%;">
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.AssignmentInd" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Enrollment Request Details</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        @if (Enrollment != null)
+        {
+            <MudGrid Spacing="2">
+                <!-- Student Info Card -->
+                <MudItem xs="12">
+                    <MudCard Outlined="true" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">STUDENT INFORMATION</MudText>
+                        <MudGrid Class="mt-1">
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Student Name</MudText>
+                                <MudText Typo="Typo.body2"><strong>@Enrollment.Student?.FirstName @Enrollment.Student?.LastName</strong></MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Student ID</MudText>
+                                <MudText Typo="Typo.body2"><strong>@Enrollment.Student?.StudentNumber</strong></MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </MudCard>
+                </MudItem>
+
+                <!-- Enrollment Details -->
+                <MudItem xs="12">
+                    <MudCard Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">ENROLLMENT DETAILS</MudText>
+                        <MudGrid Class="mt-1">
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Year Level</MudText>
+                                <MudText Typo="Typo.body2"><strong>@FormatYearLevel(Enrollment.ClassSection?.Subject?.YearLevel ?? 0)</strong></MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Semester</MudText>
+                                <MudText Typo="Typo.body2"><strong>@Enrollment.ClassSection?.Semester</strong></MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Academic Year</MudText>
+                                <MudText Typo="Typo.body2"><strong>@Enrollment.ClassSection?.SchoolYear</strong></MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Class="text-secondary">Status</MudText>
+                                <div>
+                                    <MudChip T="string" Color="@GetStatusColor(Enrollment.Status)" Size="Size.Small">@Enrollment.Status.ToString()</MudChip>
+                                </div>
+                            </MudItem>
+                        </MudGrid>
+                    </MudCard>
+                </MudItem>
+
+                <!-- Subject List Table -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-1">SUBJECT ENROLLED</MudText>
+                    <MudSimpleTable Dense="true" Hover="true" Bordered="true" Outlined="true">
+                        <thead>
+                            <tr>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th>Units</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Enrollment.ClassSection?.Subject != null)
+                            {
+                                <tr>
+                                    <td>@Enrollment.ClassSection.Subject.SubjectCode</td>
+                                    <td>@Enrollment.ClassSection.Subject.SubjectName</td>
+                                    <td>@Enrollment.ClassSection.Subject.Units</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-center text-secondary">No subject details loaded</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudItem>
+
+
+                @if (!string.IsNullOrEmpty(Enrollment.Remarks))
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Class="text-secondary">Remarks / Notes</MudText>
+                        <MudText Typo="Typo.body2">@Enrollment.Remarks</MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error">No enrollment details provided.</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+        @if (Enrollment != null)
+        {
+            @if (Enrollment.Status == EnrollmentStatus.Cancelled)
+            {
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitRequest">Submit Enrollment Request</MudButton>
+            }
+            else if (Enrollment.Status == EnrollmentStatus.Pending)
+            {
+                <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="CancelRequest">Cancel Enrollment Request</MudButton>
+            }
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Enrollment Enrollment { get; set; } = null!;
+
+    private void Close() => MudDialog.Close();
+
+    private string FormatYearLevel(int level)
+    {
+        if (level <= 0) return "N/A";
+        return level switch
+        {
+            1 => "1st Year",
+            2 => "2nd Year",
+            3 => "3rd Year",
+            4 => "4th Year",
+            _ => $"{level}th Year"
+        };
+    }
+
+    private Color GetStatusColor(EnrollmentStatus status)
+    {
+        return status switch
+        {
+            EnrollmentStatus.Pending => Color.Warning,
+            EnrollmentStatus.Enrolled => Color.Success,
+            EnrollmentStatus.Dropped => Color.Error,
+            EnrollmentStatus.Cancelled => Color.Dark,
+            EnrollmentStatus.Completed => Color.Info,
+            EnrollmentStatus.Approved => Color.Primary,
+            EnrollmentStatus.Rejected => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private async Task SubmitRequest()
+    {
+        if (Enrollment == null) return;
+        try
+        {
+            Enrollment.Status = EnrollmentStatus.Pending;
+            Enrollment.Remarks = "Submitted by student";
+            await EnrollmentService.UpdateEnrollmentAsync(Enrollment);
+            Snackbar.Add("Enrollment request submitted.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task CancelRequest()
+    {
+        if (Enrollment == null) return;
+        try
+        {
+            Enrollment.Status = EnrollmentStatus.Cancelled;
+            Enrollment.Remarks = "Cancelled by student";
+            await EnrollmentService.UpdateEnrollmentAsync(Enrollment);
+            Snackbar.Add("Enrollment request cancelled.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

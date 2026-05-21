@@ -1,0 +1,244 @@
+@page "/students"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin,Teacher,Staff")]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject IStudentService StudentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Student Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Students</MudText>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Undo" OnClick="RevertPromoteAllStudents">Revert Promotion</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ArrowUpward" OnClick="PromoteAllStudents">Promote All Students</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Student</MudButton>
+        </div>
+    </div>
+
+    <MudTable Items="@students" Dense="true" Hover="true" Loading="@isLoading" Striped="true" Filter="new Func<Student,bool>(FilterFunc)">
+        <ToolBarContent>
+            <div class="d-flex align-center gap-4 w-100 flex-wrap">
+                <MudTextField @bind-Value="searchString" Placeholder="Search by Name or Student Number" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0 flex-grow-1"></MudTextField>
+                <MudSelect T="int?" @bind-Value="filterYearLevel" Label="Year Level" Style="min-width:150px;" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem T="int?" Value="null">All Years</MudSelectItem>
+                    <MudSelectItem T="int?" Value="1">1st Year</MudSelectItem>
+                    <MudSelectItem T="int?" Value="2">2nd Year</MudSelectItem>
+                    <MudSelectItem T="int?" Value="3">3rd Year</MudSelectItem>
+                    <MudSelectItem T="int?" Value="4">4th Year</MudSelectItem>
+                </MudSelect>
+                <MudSelect T="string" @bind-Value="filterSection" Label="Section" Style="min-width:150px;" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="null">All Sections</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("A")">A</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("B")">B</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("C")">C</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("D")">D</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("E")">E</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("F")">F</MudSelectItem>
+                </MudSelect>
+            </div>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Photo</MudTh>
+            <MudTh>Student Number</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Year & Section</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Photo">
+                <MudAvatar Size="Size.Medium" Class="elevation-1">
+                    @if (!string.IsNullOrEmpty(context.ProfileImage))
+                    {
+                        <MudImage Src="@context.ProfileImage" Style="width:100%; height:100%; object-fit:cover;" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                    }
+                </MudAvatar>
+            </MudTd>
+            <MudTd DataLabel="Student Number">@context.StudentNumber</MudTd>
+            <MudTd DataLabel="Name">@context.FirstName @context.LastName</MudTd>
+            <MudTd DataLabel="Year & Section">Year @context.YearLevel - @context.Section</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">@context.Status.ToString()</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenViewDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteStudent(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<Student> students = new List<Student>();
+    private bool isLoading = true;
+    private string searchString = "";
+    private int? filterYearLevel;
+    private string? filterSection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStudents();
+    }
+
+    private async Task LoadStudents()
+    {
+        isLoading = true;
+        students = await StudentService.GetAllStudentsAsync();
+        isLoading = false;
+    }
+
+    private bool FilterFunc(Student student)
+    {
+        if (filterYearLevel.HasValue && student.YearLevel != filterYearLevel.Value) return false;
+        if (!string.IsNullOrEmpty(filterSection) && student.Section != filterSection) return false;
+
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (student.StudentNumber.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (student.FirstName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (student.LastName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<StudentFormDialog>("Create Student");
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var newStudent = (Student)result.Data!;
+                await StudentService.CreateStudentAsync(newStudent);
+                Snackbar.Add("Student created successfully", Severity.Success);
+                await LoadStudents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Student student)
+    {
+        var parameters = new DialogParameters { ["Student"] = student };
+        var dialog = await DialogService.ShowAsync<StudentFormDialog>("Edit Student", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var updatedStudent = (Student)result.Data!;
+                await StudentService.UpdateStudentAsync(updatedStudent);
+                Snackbar.Add("Student updated successfully", Severity.Success);
+                await LoadStudents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenViewDialog(Student student)
+    {
+        var parameters = new DialogParameters { ["Student"] = student };
+        await DialogService.ShowAsync<StudentViewDialog>("Student Details", parameters);
+    }
+
+    private async Task PromoteAllStudents()
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = "Are you sure you want to promote ALL active students to the next year level? Students in 4th Year will be marked as Graduated.",
+            ["ButtonText"] = "Promote All",
+            ["Color"] = Color.Secondary
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Promote Students", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await StudentService.PromoteAllStudentsAsync();
+                Snackbar.Add("All active students have been promoted to the next year level.", Severity.Success);
+                await LoadStudents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task RevertPromoteAllStudents()
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = "Are you sure you want to REVERT the promotion for all students? This will decrement their year level by 1, and change Graduated students back to 4th Year.",
+            ["ButtonText"] = "Revert Promotion",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Revert Promotion", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await StudentService.RevertPromoteAllStudentsAsync();
+                Snackbar.Add("Student promotions have been reverted.", Severity.Success);
+                await LoadStudents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteStudent(Student student)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {student.FirstName} {student.LastName}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Student", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await StudentService.DeleteStudentAsync(student.Id);
+                Snackbar.Add("Student deleted successfully", Severity.Success);
+                await LoadStudents();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+}

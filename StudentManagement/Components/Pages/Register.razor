@@ -1,0 +1,556 @@
+@page "/register"
+@layout EmptyLayout
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@inject IUserService UserService
+@inject IStudentService StudentService
+@inject ITeacherService TeacherService
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<style>
+    .register-page-shell {
+        width: 100%;
+        padding: 24px;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f7fa;
+    }
+
+    .register-modal-backdrop {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .register-modal {
+        width: 100%;
+        max-width: 650px;
+        overflow: hidden;
+        border-radius: 16px !important;
+        background: #ffffff;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.08) !important;
+    }
+
+    .register-modal-header,
+    .register-modal-footer {
+        padding: 32px;
+    }
+
+    .register-modal-header {
+        padding-bottom: 20px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .register-phase-indicator {
+        margin-top: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .register-phase-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #f0f2f5;
+        color: #6c757d;
+        font-weight: 600;
+        transition: all 0.25s ease;
+        font-size: 0.9rem;
+    }
+
+    .register-phase-chip.active,
+    .register-phase-chip.completed {
+        background: rgba(88, 106, 234, 0.1);
+        color: #586aea;
+    }
+
+    .register-phase-chip-number {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #e4e6eb;
+        font-size: 0.8rem;
+    }
+
+    .register-phase-chip.active .register-phase-chip-number,
+    .register-phase-chip.completed .register-phase-chip-number {
+        background: rgba(88, 106, 234, 0.2);
+    }
+
+    .register-phase-divider {
+        flex: 1;
+        height: 2px;
+        background: #f0f2f5;
+    }
+
+    .register-slider-viewport {
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .register-slider-track {
+        width: 300%;
+        display: flex;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .register-slide {
+        width: 33.333333%;
+        flex: 0 0 33.333333%;
+        padding: 24px 32px;
+        max-height: 55vh;
+        overflow-y: auto;
+    }
+
+    .register-modal-footer {
+        padding-top: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .register-footer-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .role-card {
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .role-card:hover {
+        border-color: #a0a0a0;
+        background-color: #f9f9f9;
+    }
+
+    .role-card.selected {
+        border-color: #586aea;
+        background-color: rgba(88, 106, 234, 0.05);
+    }
+
+    @@media (max-width: 600px) {
+        .register-page-shell {
+            padding: 16px;
+        }
+
+        .register-modal-header,
+        .register-modal-footer,
+        .register-slide {
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .register-phase-indicator {
+            gap: 6px;
+        }
+
+        .register-phase-chip {
+            padding: 6px 10px;
+            font-size: 0.8rem;
+        }
+
+        .register-modal-footer {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .register-footer-actions {
+            justify-content: flex-end;
+        }
+    }
+</style>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="register-page-shell">
+    <div class="register-modal-backdrop">
+        <MudPaper Elevation="10" Class="register-modal">
+            <div class="register-modal-header">
+                <MudText Typo="Typo.h4">Register Account</MudText>
+                <MudText Typo="Typo.body2" Class="text-secondary">
+                    Complete the three phases to create your account.
+                </MudText>
+
+                <div class="register-phase-indicator">
+                    <div class="register-phase-chip @(currentStep >= 0 ? "active" : "") @(currentStep > 0 ? "completed" : "")">
+                        <span class="register-phase-chip-number">1</span>
+                        <span>Role</span>
+                    </div>
+                    <div class="register-phase-divider"></div>
+                    <div class="register-phase-chip @(currentStep >= 1 ? "active" : "") @(currentStep > 1 ? "completed" : "")">
+                        <span class="register-phase-chip-number">2</span>
+                        <span>Profile</span>
+                    </div>
+                    <div class="register-phase-divider"></div>
+                    <div class="register-phase-chip @(currentStep == 2 ? "active" : "")">
+                        <span class="register-phase-chip-number">3</span>
+                        <span>Credentials</span>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mx-6 mb-4 mt-4">@errorMessage</MudAlert>
+            }
+
+            <div class="register-slider-viewport">
+                <div class="register-slider-track" style="@GetSliderStyle()">
+                    
+                    <!-- PHASE 1: Account Type -->
+                    <section class="register-slide">
+                        <MudText Typo="Typo.h6" Class="mb-1">First Phase</MudText>
+                        <MudText Typo="Typo.body2" Class="text-secondary mb-4">
+                            Select your account type.
+                        </MudText>
+
+                        <MudGrid>
+                            <MudItem xs="12" sm="4">
+                                <div class="role-card @(user.Role == UserRole.Teacher ? "selected" : "")" @onclick="() => SelectRole(UserRole.Teacher)">
+                                    <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Large" Color="@(user.Role == UserRole.Teacher ? Color.Primary : Color.Default)" />
+                                    <MudText Typo="Typo.subtitle1" Class="mt-2">Instructor</MudText>
+                                </div>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <div class="role-card @(user.Role == UserRole.Admin ? "selected" : "")" @onclick="() => SelectRole(UserRole.Admin)">
+                                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Large" Color="@(user.Role == UserRole.Admin ? Color.Primary : Color.Default)" />
+                                    <MudText Typo="Typo.subtitle1" Class="mt-2">Admin</MudText>
+                                </div>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <div class="role-card @(user.Role == UserRole.Student ? "selected" : "")" @onclick="() => SelectRole(UserRole.Student)">
+                                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" Color="@(user.Role == UserRole.Student ? Color.Primary : Color.Default)" />
+                                    <MudText Typo="Typo.subtitle1" Class="mt-2">Student</MudText>
+                                </div>
+                            </MudItem>
+                        </MudGrid>
+                    </section>
+
+                    <!-- PHASE 2: Profile -->
+                    <section class="register-slide">
+                        <MudText Typo="Typo.h6" Class="mb-1">Second Phase</MudText>
+                        <MudText Typo="Typo.body2" Class="text-secondary mb-4">
+                            Provide your basic identity details.
+                        </MudText>
+
+                        <MudForm @ref="profileForm">
+                            <MudTextField @bind-Value="user.FirstName" Label="First Name" Variant="Variant.Outlined" Required="true" />
+                            
+                            @if (user.Role == UserRole.Student)
+                            {
+                                <MudTextField @bind-Value="middleName" Label="Middle Name" Variant="Variant.Outlined" Class="mt-3" />
+                            }
+
+                            <MudTextField @bind-Value="user.LastName" Label="Last Name" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                            <MudTextField @bind-Value="user.Email" Label="Email" Variant="Variant.Outlined" InputType="InputType.Email" Required="true" Class="mt-3" />
+                            <MudTextField @bind-Value="user.Location" Label="Location" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                            
+                            @if (user.Role == UserRole.Teacher)
+                            {
+                                <MudTextField @bind-Value="majorSubject" Label="Major Subject Handling" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                            }
+                            else if (user.Role == UserRole.Student)
+                            {
+                                <MudTextField @bind-Value="user.PhoneNumber" Label="Phone Number" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                                <MudTextField @bind-Value="collegeDepartment" Label="College Department" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                                <MudTextField @bind-Value="course" Label="Course" Variant="Variant.Outlined" Required="true" Class="mt-3" />
+                                <MudSelect T="int" @bind-Value="yearLevel" Label="Year Level" Variant="Variant.Outlined" Required="true" Class="mt-3">
+                                    <MudSelectItem Value="1">1st Year</MudSelectItem>
+                                    <MudSelectItem Value="2">2nd Year</MudSelectItem>
+                                    <MudSelectItem Value="3">3rd Year</MudSelectItem>
+                                    <MudSelectItem Value="4">4th Year</MudSelectItem>
+                                </MudSelect>
+                                <MudSelect T="string" @bind-Value="sectionBlock" Label="Section/Block" Variant="Variant.Outlined" Required="true" Class="mt-3">
+                                    <MudSelectItem Value="@("A")">A</MudSelectItem>
+                                    <MudSelectItem Value="@("B")">B</MudSelectItem>
+                                    <MudSelectItem Value="@("C")">C</MudSelectItem>
+                                    <MudSelectItem Value="@("D")">D</MudSelectItem>
+                                    <MudSelectItem Value="@("E")">E</MudSelectItem>
+                                    <MudSelectItem Value="@("F")">F</MudSelectItem>
+                                </MudSelect>
+                            }
+                        </MudForm>
+                    </section>
+
+                    <!-- PHASE 3: Credentials -->
+                    <section class="register-slide">
+                        <MudText Typo="Typo.h6" Class="mb-1">Third Phase</MudText>
+                        <MudText Typo="Typo.body2" Class="text-secondary mb-4">
+                            Set your login credentials and confirm your password.
+                        </MudText>
+
+                        <MudForm @ref="credentialsForm">
+                            <MudTextField @bind-Value="user.Username"
+                                          Label="Username"
+                                          Variant="Variant.Outlined"
+                                          Required="true"
+                                          RequiredError="Username is required" />
+                            <MudTextField @bind-Value="password"
+                                          Label="Password"
+                                          Variant="Variant.Outlined"
+                                          InputType="@passwordInputType"
+                                          Required="true"
+                                          RequiredError="Password is required"
+                                          Class="mt-4"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@passwordInputIcon"
+                                          OnAdornmentClick="TogglePasswordVisibility"
+                                          AdornmentAriaLabel="Toggle password visibility" />
+                            <MudTextField @bind-Value="confirmPassword"
+                                          Label="Confirm password"
+                                          Variant="Variant.Outlined"
+                                          InputType="@confirmPasswordInputType"
+                                          Required="true"
+                                          RequiredError="Confirm password is required"
+                                          Class="mt-4"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@confirmPasswordInputIcon"
+                                          OnAdornmentClick="ToggleConfirmPasswordVisibility"
+                                          AdornmentAriaLabel="Toggle confirm password visibility" />
+                        </MudForm>
+                    </section>
+                </div>
+            </div>
+
+            <div class="register-modal-footer">
+                <MudLink Href="/login">Already have an account? Login</MudLink>
+
+                <div class="register-footer-actions">
+                    @if (currentStep > 0)
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Default"
+                                   Disabled="@isSubmitting"
+                                   OnClick="GoBack">
+                            Back
+                        </MudButton>
+                    }
+
+                    @if (currentStep < 2)
+                    {
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Disabled="@isSubmitting"
+                                   OnClick="GoNextAsync">
+                            Continue
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Disabled="@isSubmitting"
+                                   OnClick="RegisterAsync">
+                            @if (isSubmitting)
+                            {
+                                <MudProgressCircular Class="me-2" Size="Size.Small" Indeterminate="true" />
+                                <span>Registering...</span>
+                            }
+                            else
+                            {
+                                <span>Register</span>
+                            }
+                        </MudButton>
+                    }
+                </div>
+            </div>
+        </MudPaper>
+    </div>
+</MudContainer>
+
+@code {
+    private MudForm profileForm = null!;
+    private MudForm credentialsForm = null!;
+    private int currentStep = 0;
+    private bool isSubmitting;
+
+    private readonly User user = new()
+    {
+        Username = string.Empty,
+        Email = string.Empty,
+        FirstName = string.Empty,
+        LastName = string.Empty,
+        PasswordHash = string.Empty,
+        Role = UserRole.Student,
+        Location = string.Empty
+    };
+
+    // Extra fields
+    private string majorSubject = string.Empty;
+    private string middleName = string.Empty;
+    private string collegeDepartment = string.Empty;
+    private string course = string.Empty;
+    private int yearLevel = 1;
+    private string sectionBlock = "A";
+
+    private string password = string.Empty;
+    private string confirmPassword = string.Empty;
+    private string? errorMessage;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/dashboard", forceLoad: true);
+        }
+    }
+
+    private InputType passwordInputType = InputType.Password;
+    private string passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+    private InputType confirmPasswordInputType = InputType.Password;
+    private string confirmPasswordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    private void SelectRole(UserRole role)
+    {
+        user.Role = role;
+    }
+
+    private async Task GoNextAsync()
+    {
+        errorMessage = null;
+
+        if (currentStep == 0)
+        {
+            currentStep = 1;
+        }
+        else if (currentStep == 1)
+        {
+            await profileForm.ValidateAsync();
+            if (profileForm.IsValid)
+            {
+                currentStep = 2;
+            }
+        }
+    }
+
+    private void GoBack()
+    {
+        errorMessage = null;
+        if (currentStep > 0)
+        {
+            currentStep--;
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        errorMessage = null;
+
+        await credentialsForm.ValidateAsync();
+        if (!credentialsForm.IsValid)
+        {
+            return;
+        }
+
+        if (password != confirmPassword)
+        {
+            errorMessage = "Passwords do not match.";
+            return;
+        }
+
+        isSubmitting = true;
+
+        try
+        {
+            // Register base user
+            var createdUser = await UserService.RegisterAsync(user, password);
+
+            // Based on role, create specific profiles if needed.
+            if (user.Role == UserRole.Teacher)
+            {
+                var teacher = new Teacher
+                {
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    Email = user.Email,
+                    ContactNumber = user.PhoneNumber ?? "",
+                    Department = "Faculty", // Or collegeDepartment if we added it to teacher
+                    Specialization = majorSubject,
+                    EmployeeNumber = $"EMP-{createdUser.Id}-{DateTime.UtcNow.Year}"
+                };
+                await TeacherService.CreateTeacherAsync(teacher);
+            }
+            else if (user.Role == UserRole.Student)
+            {
+                var student = new Student
+                {
+                    FirstName = user.FirstName,
+                    MiddleName = middleName,
+                    LastName = user.LastName,
+                    Email = user.Email,
+                    Address = user.Location ?? "",
+                    ContactNumber = user.PhoneNumber ?? "",
+                    YearLevel = yearLevel,
+                    Section = sectionBlock,
+                    Gender = "Unspecified", // Required by model
+                    StudentNumber = $"STU-{createdUser.Id}-{DateTime.UtcNow.Year}"
+                };
+                // Course & College Department are currently not in Student model directly, 
+                // but we can map them if we add properties later, or just create the entity for now.
+                await StudentService.CreateStudentAsync(student);
+            }
+
+            Snackbar.Add("Registration successful. Please login.", Severity.Success);
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordInputIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private void ToggleConfirmPasswordVisibility()
+    {
+        if (confirmPasswordInputType == InputType.Password)
+        {
+            confirmPasswordInputType = InputType.Text;
+            confirmPasswordInputIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            confirmPasswordInputType = InputType.Password;
+            confirmPasswordInputIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private string GetSliderStyle() => $"transform: translateX(-{currentStep * 33.333333}%);";
+}

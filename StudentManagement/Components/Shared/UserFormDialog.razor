@@ -1,0 +1,52 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudTextField @bind-Value="User.Username" Label="Username" Required="true" />
+            @if (User.Id == 0)
+            {
+                <MudTextField @bind-Value="Password" Label="Password" InputType="InputType.Password" Required="true" />
+            }
+            <MudTextField @bind-Value="User.Email" Label="Email" Required="true" InputType="InputType.Email" />
+            <MudTextField @bind-Value="User.FirstName" Label="First Name" Required="true" />
+            <MudTextField @bind-Value="User.LastName" Label="Last Name" Required="true" />
+            
+            <MudSelect @bind-Value="User.Role" Label="Role" Required="true">
+                @foreach (UserRole role in Enum.GetValues(typeof(UserRole)))
+                {
+                    <MudSelectItem Value="@role">@role.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSwitch @bind-Value="User.IsActive" Label="Is Active" Color="Color.Primary" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public User User { get; set; } = new User { Username = "", Email = "", FirstName = "", LastName = "", PasswordHash = "" };
+    
+    public string Password { get; set; } = "";
+
+    bool success = true;
+    MudForm form = null!;
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            var result = new { User, Password };
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

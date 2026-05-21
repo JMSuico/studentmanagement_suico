@@ -1,0 +1,321 @@
+@page "/attendance"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Components.Shared
+@using System.Security.Claims
+@inject IAttendanceService AttendanceService
+@inject IAttendanceSessionService AttendanceSessionService
+@inject IStudentService StudentService
+@inject IEnrollmentService EnrollmentService
+@inject IClassSectionService ClassSectionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Attendance Tracking</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Attendance Tracking</MudText>
+        @if (!isStudent)
+        {
+            <div class="d-flex gap-4 align-center">
+                <MudDatePicker @bind-Date="selectedDate" Label="Date" />
+                <MudSelect T="int" @bind-Value="classSectionId" Label="Class Section">
+                    @foreach (var cls in classes)
+                    {
+                        <MudSelectItem Value="@cls.Id">@cls.ClassName - @cls.SectionName</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadAttendances">Load</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenMarkAttendanceDialog">Manual</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.QrCode" OnClick="GenerateSession">Generate Code</MudButton>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(activeSessionCode))
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4 text-center">
+            <MudText Typo="Typo.h5">Active Session Code: <strong>@activeSessionCode</strong></MudText>
+        </MudAlert>
+    }
+
+    @if (isStudent)
+    {
+        <MudCard Class="mb-6">
+            <MudCardContent>
+                <MudText Typo="Typo.h6">Submit Attendance</MudText>
+                <div class="d-flex gap-4 align-center mt-4">
+                    <MudTextField @bind-Value="studentCodeInput" Label="Enter 6-Digit Code" Variant="Variant.Outlined" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitCode">Submit</MudButton>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    <MudTable Items="@attendances" Dense="true" Hover="true" Loading="@isLoading" Striped="true">
+        <HeaderContent>
+            @if (!isStudent)
+            {
+                <MudTh>Student</MudTh>
+            }
+            @if (isStudent)
+            {
+                <MudTh>Date</MudTh>
+                <MudTh>Class</MudTh>
+            }
+            <MudTh>Status</MudTh>
+            <MudTh>Time In</MudTh>
+            <MudTh>Time Out</MudTh>
+            <MudTh>Remarks</MudTh>
+            @if (!isStudent)
+            {
+                <MudTh>Actions</MudTh>
+            }
+        </HeaderContent>
+        <RowTemplate>
+            @if (!isStudent)
+            {
+                <MudTd DataLabel="Student">@(context.Student?.FirstName) @(context.Student?.LastName)</MudTd>
+            }
+            @if (isStudent)
+            {
+                <MudTd DataLabel="Date">@context.Date.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Class">@(context.ClassSection?.ClassName) - @(context.ClassSection?.SectionName)</MudTd>
+            }
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status.ToString()</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Time In">@(context.TimeIn.HasValue ? DateTime.Today.Add(context.TimeIn.Value).ToString("hh:mm tt") : "-")</MudTd>
+            <MudTd DataLabel="Time Out">@(context.TimeOut.HasValue ? DateTime.Today.Add(context.TimeOut.Value).ToString("hh:mm tt") : "-")</MudTd>
+            <MudTd DataLabel="Remarks">@context.Remarks</MudTd>
+            @if (!isStudent)
+            {
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                </MudTd>
+            }
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No attendance records found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<Attendance> attendances = new List<Attendance>();
+    private IEnumerable<ClassSection> classes = new List<ClassSection>();
+    private bool isLoading = false;
+    private DateTime? selectedDate = DateTime.Today;
+    private int classSectionId = 0;
+    
+    private bool isStudent = false;
+    private int currentStudentId = 0;
+    
+    private string? activeSessionCode;
+    private string studentCodeInput = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isStudent = user.IsInRole("Student");
+
+        if (isStudent)
+        {
+            var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                var studentRecord = (await StudentService.GetAllStudentsAsync()).FirstOrDefault(s => s.Email == userEmail);
+                if (studentRecord != null)
+                {
+                    currentStudentId = studentRecord.Id;
+                }
+            }
+            await LoadAttendances();
+        }
+        else
+        {
+            classes = await ClassSectionService.GetAllClassesAsync();
+            if (classes.Any())
+            {
+                classSectionId = classes.First().Id;
+                await LoadAttendances();
+            }
+        }
+    }
+
+    private async Task LoadAttendances()
+    {
+        isLoading = true;
+        if (isStudent)
+        {
+            attendances = await AttendanceService.GetStudentAttendancesAsync(currentStudentId);
+            attendances = attendances.OrderByDescending(a => a.Date);
+        }
+        else
+        {
+            if (selectedDate != null && classSectionId > 0)
+            {
+                attendances = await AttendanceService.GetClassAttendancesByDateRangeAsync(classSectionId, selectedDate.Value, selectedDate.Value);
+                
+                // Check if there is an active session
+                var activeSession = await AttendanceSessionService.GetActiveSessionAsync(classSectionId, selectedDate.Value);
+                if (activeSession != null)
+                {
+                    activeSessionCode = activeSession.GeneratedCode;
+                }
+                else
+                {
+                    activeSessionCode = null;
+                }
+            }
+        }
+        isLoading = false;
+    }
+
+    private Color GetStatusColor(AttendanceStatus status)
+    {
+        return status switch
+        {
+            AttendanceStatus.Present => Color.Success,
+            AttendanceStatus.Absent => Color.Error,
+            AttendanceStatus.Late => Color.Warning,
+            AttendanceStatus.Excused => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private async Task GenerateSession()
+    {
+        if (classSectionId == 0 || selectedDate == null)
+        {
+            Snackbar.Add("Select a class and date first.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            var session = await AttendanceSessionService.GenerateSessionAsync(classSectionId, selectedDate.Value);
+            activeSessionCode = session.GeneratedCode;
+            Snackbar.Add($"Session generated. Code: {activeSessionCode}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SubmitCode()
+    {
+        if (string.IsNullOrWhiteSpace(studentCodeInput))
+        {
+            Snackbar.Add("Please enter a code.", Severity.Warning);
+            return;
+        }
+
+        if (currentStudentId == 0)
+        {
+            Snackbar.Add("Student profile not found.", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            await AttendanceService.SubmitAttendanceCodeAsync(currentStudentId, studentCodeInput);
+            Snackbar.Add("Attendance recorded successfully!", Severity.Success);
+            studentCodeInput = "";
+            await LoadAttendances();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task OpenEditDialog(Attendance attendance)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Status"] = attendance.Status,
+            ["TimeIn"] = attendance.TimeIn,
+            ["TimeOut"] = attendance.TimeOut,
+            ["Remarks"] = attendance.Remarks
+        };
+        var dialog = await DialogService.ShowAsync<AttendanceDialog>("Edit Attendance", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                dynamic data = result.Data!;
+                await AttendanceService.RecordAttendanceAsync(
+                    attendance.StudentId, 
+                    attendance.ClassSectionId, 
+                    attendance.Date, 
+                    data.Status, 
+                    data.TimeIn, 
+                    data.TimeOut, 
+                    data.Remarks);
+                    
+                Snackbar.Add("Attendance updated successfully", Severity.Success);
+                await LoadAttendances();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenMarkAttendanceDialog()
+    {
+        if (selectedDate == null || classSectionId == 0)
+        {
+            Snackbar.Add("Please select a date and class first.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["Status"] = AttendanceStatus.Present,
+            ["TimeIn"] = (TimeSpan?)null,
+            ["TimeOut"] = (TimeSpan?)null,
+            ["Remarks"] = ""
+        };
+        var dialog = await DialogService.ShowAsync<AttendanceDialog>("Mark Attendance", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                dynamic data = result.Data!;
+                var enrollments = await EnrollmentService.GetClassSectionEnrollmentsAsync(classSectionId);
+                foreach (var enrollment in enrollments.Where(e => e.Status == EnrollmentStatus.Enrolled))
+                {
+                    await AttendanceService.RecordAttendanceAsync(
+                        enrollment.StudentId,
+                        classSectionId,
+                        selectedDate.Value,
+                        data.Status,
+                        data.TimeIn,
+                        data.TimeOut,
+                        data.Remarks);
+                }
+                Snackbar.Add("Attendance marked for all enrolled students.", Severity.Success);
+                await LoadAttendances();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+}

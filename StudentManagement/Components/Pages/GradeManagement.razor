@@ -1,0 +1,445 @@
+@page "/grades"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject IGradeService GradeService
+@inject ISubjectService SubjectService
+@inject IStudentService StudentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Grade Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+
+    @if (isStudent)
+    {
+        @* ===================== STUDENT VIEW ===================== *@
+        <MudText Typo="Typo.h4" Class="mb-4">My Grades</MudText>
+
+        <MudTable Items="@grades" Dense="true" Hover="true" Loading="@isLoading" Striped="true" Filter="new Func<Grade,bool>(FilterFunc)">
+            <ToolBarContent>
+                <MudTextField @bind-Value="searchString" Placeholder="Search by Subject" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Subject</MudTh>
+                <MudTh>Prelim</MudTh>
+                <MudTh>Midterm</MudTh>
+                <MudTh>Final</MudTh>
+                <MudTh>Overall</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Subject">@(context.Subject?.SubjectCode) - @(context.Subject?.SubjectName)</MudTd>
+                <MudTd DataLabel="Prelim">@(context.PrelimGrade?.ToString("0.00") ?? "-")</MudTd>
+                <MudTd DataLabel="Midterm">@(context.MidtermGrade?.ToString("0.00") ?? "-")</MudTd>
+                <MudTd DataLabel="Final">@(context.FinalGrade?.ToString("0.00") ?? "-")</MudTd>
+                <MudTd DataLabel="Overall">@(context.OverallGrade?.ToString("0.00") ?? "-")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small">@context.Status.ToString()</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenViewDialog(context))" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+    else
+    {
+        @* ===================== ADMIN / TEACHER VIEW ===================== *@
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="activeTab">
+
+            @* ========== TAB 1: Student Grades ========== *@
+            <MudTabPanel Text="Student Grades" Icon="@Icons.Material.Filled.Grade">
+                <div class="d-flex justify-space-between align-center mb-4 mt-2">
+                    <MudText Typo="Typo.h5">Student Grades</MudText>
+                    <div class="d-flex gap-4 align-center">
+                        <MudSelect T="int" @bind-Value="subjectId" Label="Select Subject" Style="min-width: 250px;">
+                            @foreach (var sub in subjects)
+                            {
+                                <MudSelectItem Value="@sub.Id">@sub.SubjectCode - @sub.SubjectName</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Calculate" OnClick="AutoComputeGrades" Disabled="@(subjectId == 0)">Auto Compute</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddGradeDialog">Add Grade</MudButton>
+                    </div>
+                </div>
+
+                <MudTable Items="@grades" Dense="true" Hover="true" Loading="@isLoading" Striped="true" Filter="new Func<Grade,bool>(FilterFunc)">
+                    <ToolBarContent>
+                        <MudTextField @bind-Value="searchString" Placeholder="Search by Student or Subject" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh>Student</MudTh>
+                        <MudTh>Subject</MudTh>
+                        <MudTh>Prelim</MudTh>
+                        <MudTh>Midterm</MudTh>
+                        <MudTh>Final</MudTh>
+                        <MudTh>Overall</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Student">@(context.Student?.FirstName) @(context.Student?.LastName)</MudTd>
+                        <MudTd DataLabel="Subject">@(context.Subject?.SubjectCode)</MudTd>
+                        <MudTd DataLabel="Prelim">@(context.PrelimGrade?.ToString("0.00") ?? "-")</MudTd>
+                        <MudTd DataLabel="Midterm">@(context.MidtermGrade?.ToString("0.00") ?? "-")</MudTd>
+                        <MudTd DataLabel="Final">@(context.FinalGrade?.ToString("0.00") ?? "-")</MudTd>
+                        <MudTd DataLabel="Overall">@(context.OverallGrade?.ToString("0.00") ?? "-")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Color="Color.Primary" Size="Size.Small">@context.Status.ToString()</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenViewDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteGrade(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudTabPanel>
+
+            @* ========== TAB 2: Setup Grading ========== *@
+            <MudTabPanel Text="Setup Grading" Icon="@Icons.Material.Filled.Settings">
+                <div class="d-flex justify-space-between align-center mb-4 mt-2">
+                    <MudText Typo="Typo.h5">Grading Setup by Subject</MudText>
+                    <MudText Typo="Typo.body2" Class="text-secondary">All subjects are listed below. Click Edit to configure grading percentages.</MudText>
+                </div>
+
+                <MudTable Items="@setupRows" Dense="true" Hover="true" Loading="@isLoadingSetup" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Subject Code</MudTh>
+                        <MudTh>Subject Name</MudTh>
+                        <MudTh>Quizzes</MudTh>
+                        <MudTh>Long Exam</MudTh>
+                        <MudTh>Performance</MudTh>
+                        <MudTh>Semester Exam</MudTh>
+                        <MudTh>Total</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Subject Code">@context.Subject.SubjectCode</MudTd>
+                        <MudTd DataLabel="Subject Name">@context.Subject.SubjectName</MudTd>
+                        <MudTd DataLabel="Quizzes">@(context.Setup != null ? $"{context.Setup.QuizzesPercentage}%" : "-")</MudTd>
+                        <MudTd DataLabel="Long Exam">@(context.Setup != null ? $"{context.Setup.LongExamPercentage}%" : "-")</MudTd>
+                        <MudTd DataLabel="Performance">
+                            @if (context.Setup != null)
+                            {
+                                <MudTooltip>
+                                    <ChildContent>
+                                        <MudText Style="cursor: help; text-decoration: underline dotted;">@(context.Setup.PerformancePercentage)%</MudText>
+                                    </ChildContent>
+                                    <TooltipContent>
+                                        <div>
+                                            <strong>Performance Breakdown:</strong><br/>
+                                            Hands-on: @(context.Setup.HandsOnPercentage)%<br/>
+                                            Practical Exam: @(context.Setup.PracticalPercentage)%<br/>
+                                            Oral / Assignment: @(context.Setup.OralPercentage)%
+                                        </div>
+                                    </TooltipContent>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudText>-</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Semester Exam">@(context.Setup != null ? $"{context.Setup.SemesterExamPercentage}%" : "-")</MudTd>
+                        <MudTd DataLabel="Total">
+                            @if (context.Setup != null)
+                            {
+                                var total = context.Setup.QuizzesPercentage + context.Setup.LongExamPercentage + context.Setup.PerformancePercentage + context.Setup.SemesterExamPercentage;
+                                <MudChip T="string" Color="@(total == 100 ? Color.Success : Color.Error)" Size="Size.Small">@total%</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">Not Set</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            @if (context.Setup != null)
+                            {
+                                var mainTotal = context.Setup.QuizzesPercentage + context.Setup.LongExamPercentage + context.Setup.PerformancePercentage + context.Setup.SemesterExamPercentage;
+                                var perfTotal = context.Setup.HandsOnPercentage + context.Setup.PracticalPercentage + context.Setup.OralPercentage;
+                                if (mainTotal == 100 && perfTotal == context.Setup.PerformancePercentage)
+                                {
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Configured</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">Incomplete</MudChip>
+                                }
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Not Configured</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditSetup(context))">
+                                @(context.Setup != null ? "Edit" : "Configure")
+                            </MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudTabPanel>
+
+        </MudTabs>
+    }
+
+</MudContainer>
+
+@code {
+    private IEnumerable<Grade> grades = new List<Grade>();
+    private IEnumerable<Subject> subjects = new List<Subject>();
+    private List<SubjectSetupRow> setupRows = new();
+    private bool isLoading = true;
+    private bool isLoadingSetup = true;
+    private string searchString = "";
+    private int subjectId = 0;
+    private int activeTab = 0;
+
+    private bool isStudent = false;
+    private int currentStudentId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isStudent = user.IsInRole("Student");
+
+        if (isStudent)
+        {
+            var userEmail = user.FindFirst(ClaimTypes.Email)?.Value;
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                var studentRecord = (await StudentService.GetAllStudentsAsync()).FirstOrDefault(s => s.Email == userEmail);
+                if (studentRecord != null)
+                {
+                    currentStudentId = studentRecord.Id;
+                }
+            }
+        }
+        else
+        {
+            subjects = await SubjectService.GetAllSubjectsAsync();
+            if (subjects.Any())
+            {
+                subjectId = subjects.First().Id;
+            }
+            await LoadSetupRows();
+        }
+
+        await LoadGrades();
+    }
+
+    private async Task LoadGrades()
+    {
+        isLoading = true;
+        if (isStudent)
+        {
+            grades = await GradeService.GetStudentGradesAsync(currentStudentId);
+        }
+        else
+        {
+            grades = await GradeService.GetAllGradesAsync();
+            if (subjectId > 0)
+            {
+                grades = grades.Where(g => g.SubjectId == subjectId).ToList();
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task LoadSetupRows()
+    {
+        isLoadingSetup = true;
+        var allSubjects = await SubjectService.GetAllSubjectsAsync();
+        var allSetups = await GradeService.GetAllGradeSetupsAsync();
+
+        setupRows.Clear();
+        foreach (var subject in allSubjects)
+        {
+            var setup = allSetups.FirstOrDefault(s => s.SubjectId == subject.Id);
+            setupRows.Add(new SubjectSetupRow
+            {
+                Subject = subject,
+                Setup = setup
+            });
+        }
+        isLoadingSetup = false;
+    }
+
+    private bool FilterFunc(Grade grade)
+    {
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        var studentName = $"{grade.Student?.FirstName} {grade.Student?.LastName}";
+        if (studentName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (grade.Subject?.SubjectCode?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (grade.Subject?.SubjectName?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true) return true;
+        return false;
+    }
+
+    private async Task OpenEditSetup(SubjectSetupRow row)
+    {
+        var setup = row.Setup ?? new SubjectGradeSetup
+        {
+            SubjectId = row.Subject.Id,
+            Semester = "1st Semester",
+            QuizzesPercentage = 10,
+            LongExamPercentage = 15,
+            PerformancePercentage = 60,
+            SemesterExamPercentage = 15,
+            HandsOnPercentage = 20,
+            PracticalPercentage = 20,
+            OralPercentage = 20
+        };
+
+        var parameters = new DialogParameters { ["Setup"] = setup };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<GradeSetupDialog>($"Setup Grading - {row.Subject.SubjectCode}", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            Snackbar.Add($"Grade setup saved for {row.Subject.SubjectCode}.", Severity.Success);
+            await LoadSetupRows();
+        }
+    }
+
+    private async Task AutoComputeGrades()
+    {
+        if (subjectId == 0) return;
+        
+        try
+        {
+            var studentsInSubject = grades.Select(g => g.StudentId).Distinct();
+            foreach (var studentId in studentsInSubject)
+            {
+                await GradeService.RecalculateStudentGradeAsync(studentId, subjectId, "1st Semester");
+            }
+            Snackbar.Add("Grades computed successfully.", Severity.Success);
+            await LoadGrades();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenAddGradeDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Grade"] = new Grade(),
+            ["StudentName"] = "New Grade",
+            ["SubjectName"] = ""
+        };
+        var dialog = await DialogService.ShowAsync<GradeFormDialog>("Add Grade", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var newGrade = (Grade)result.Data!;
+                await GradeService.SubmitGradeAsync(
+                    newGrade.StudentId,
+                    newGrade.ClassSectionId,
+                    newGrade.SubjectId,
+                    newGrade.PrelimGrade,
+                    newGrade.MidtermGrade,
+                    newGrade.FinalGrade,
+                    newGrade.Remarks);
+                Snackbar.Add("Grade added successfully", Severity.Success);
+                await LoadGrades();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Grade grade)
+    {
+        var parameters = new DialogParameters 
+        { 
+            ["Grade"] = grade,
+            ["StudentName"] = $"{grade.Student?.FirstName} {grade.Student?.LastName}",
+            ["SubjectName"] = $"{grade.Subject?.SubjectCode} - {grade.Subject?.SubjectName}"
+        };
+        var dialog = await DialogService.ShowAsync<GradeFormDialog>("Edit Grade", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var updatedGrade = (Grade)result.Data!;
+                await GradeService.UpdateGradeAsync(updatedGrade);
+                Snackbar.Add("Grade updated successfully", Severity.Success);
+                await LoadGrades();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenViewDialog(Grade grade)
+    {
+        var parameters = new DialogParameters { ["Grade"] = grade };
+        await DialogService.ShowAsync<GradeViewDialog>("Grade Details", parameters);
+    }
+
+    private async Task DeleteGrade(Grade grade)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete the grade for {grade.Student?.FirstName} {grade.Student?.LastName} in {grade.Subject?.SubjectCode}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Grade", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await GradeService.DeleteGradeAsync(grade.Id);
+                Snackbar.Add("Grade deleted successfully", Severity.Success);
+                await LoadGrades();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    // View model for the Setup Grading table
+    public class SubjectSetupRow
+    {
+        public Subject Subject { get; set; } = null!;
+        public SubjectGradeSetup? Setup { get; set; }
+    }
+}

@@ -1,0 +1,251 @@
+@page "/subjects"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@attribute [Authorize]
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@using StudentManagement.Components.Shared
+@inject ISubjectService SubjectService
+@inject IClassSectionService ClassSectionService
+@inject IEnrollmentService EnrollmentService
+@inject IStudentService StudentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IUserService UserService
+
+<PageTitle>Subject Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Subjects</MudText>
+        @if (!isStudent)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Subject</MudButton>
+        }
+    </div>
+
+    <MudTable Items="@subjects" Dense="true" Hover="true" Loading="@isLoading" Striped="true" Filter="new Func<Subject,bool>(FilterFunc)">
+        <ToolBarContent>
+            <div class="d-flex align-center gap-4 w-100">
+                <MudTextField @bind-Value="searchString" Placeholder="Search by Code or Name" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0 flex-grow-1"></MudTextField>
+                @if (!isStudent)
+                {
+                    <MudSelect T="int?" @bind-Value="filterYearLevel" Label="Year Level" Style="min-width:180px;" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                        <MudSelectItem T="int?" Value="null">All Years</MudSelectItem>
+                        <MudSelectItem T="int?" Value="1">1st Year</MudSelectItem>
+                        <MudSelectItem T="int?" Value="2">2nd Year</MudSelectItem>
+                        <MudSelectItem T="int?" Value="3">3rd Year</MudSelectItem>
+                        <MudSelectItem T="int?" Value="4">4th Year</MudSelectItem>
+                    </MudSelect>
+                }
+            </div>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Units</MudTh>
+            <MudTh>Year Level</MudTh>
+            <MudTh>Semester</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.SubjectCode</MudTd>
+            <MudTd DataLabel="Name">@context.SubjectName</MudTd>
+            <MudTd DataLabel="Units">@context.Units</MudTd>
+            <MudTd DataLabel="Year Level">
+                @(context.YearLevel <= 0 ? "N/A" : context.YearLevel switch
+                {
+                    1 => "1st Year",
+                    2 => "2nd Year",
+                    3 => "3rd Year",
+                    4 => "4th Year",
+                    _ => $"{context.YearLevel}th Year"
+                })
+            </MudTd>
+            <MudTd DataLabel="Semester">@context.Semester</MudTd>
+            <MudTd DataLabel="Status">
+                @if(context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Inactive</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Info" Size="Size.Small" OnClick="@(() => ViewSubject(context))" />
+                @if (!isStudent)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Warning" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteSubject(context))" />
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="GoToEnrollment">Enroll</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No subjects found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private IEnumerable<Subject> subjects = new List<Subject>();
+    private bool isLoading = true;
+    private string searchString = "";
+    private int? filterYearLevel;
+    
+    private bool isStudent = false;
+    private int currentStudentId = 0;
+    private int currentStudentYearLevel = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isStudent = user.IsInRole("Student");
+
+        if (isStudent)
+        {
+            var idClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            if (idClaim != null && int.TryParse(idClaim.Value, out int userId))
+            {
+                var userRecord = await UserService.GetUserByIdAsync(userId);
+                if (userRecord != null)
+                {
+                    var studentRecord = (await StudentService.GetAllStudentsAsync()).FirstOrDefault(s => 
+                        s.Email == userRecord.Email || 
+                        (s.FirstName == userRecord.FirstName && s.LastName == userRecord.LastName));
+                    
+                    if (studentRecord != null)
+                    {
+                        currentStudentId = studentRecord.Id;
+                        currentStudentYearLevel = studentRecord.YearLevel;
+                    }
+                }
+            }
+        }
+
+        await LoadSubjects();
+    }
+
+    private async Task LoadSubjects()
+    {
+        isLoading = true;
+        subjects = await SubjectService.GetAllSubjectsAsync();
+        if (isStudent)
+        {
+            subjects = subjects.Where(s => s.IsActive && s.YearLevel == currentStudentYearLevel).ToList();
+        }
+        isLoading = false;
+    }
+
+    private bool FilterFunc(Subject subject)
+    {
+        if (filterYearLevel.HasValue && subject.YearLevel != filterYearLevel.Value) return false;
+
+        if (string.IsNullOrWhiteSpace(searchString)) return true;
+        if (subject.SubjectCode.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (subject.SubjectName.Contains(searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private void GoToEnrollment()
+    {
+        Navigation.NavigateTo("/enrollments");
+    }
+
+    private async Task ViewSubject(Subject subject)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Code: {subject.SubjectCode}\nName: {subject.SubjectName}\nDescription: {subject.Description ?? "N/A"}\nUnits: {subject.Units}\nYear Level: {subject.YearLevel}\nSemester: {subject.Semester}\nStatus: {(subject.IsActive ? "Active" : "Inactive")}",
+            ["ButtonText"] = "Close",
+            ["Color"] = Color.Primary
+        };
+        await DialogService.ShowAsync<ConfirmDialog>("Subject Details", parameters);
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<SubjectFormDialog>("Create Subject");
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var newSubject = (Subject)result.Data!;
+                await SubjectService.CreateSubjectAsync(newSubject);
+                Snackbar.Add("Subject created successfully", Severity.Success);
+                await LoadSubjects();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditDialog(Subject subject)
+    {
+        var parameters = new DialogParameters { ["Subject"] = subject };
+        var dialog = await DialogService.ShowAsync<SubjectFormDialog>("Edit Subject", parameters);
+        var result = await dialog.Result;
+        
+        if (!result!.Canceled)
+        {
+            try
+            {
+                var updatedSubject = (Subject)result.Data!;
+                await SubjectService.UpdateSubjectAsync(updatedSubject);
+                Snackbar.Add("Subject updated successfully", Severity.Success);
+                await LoadSubjects();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteSubject(Subject subject)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to delete {subject.SubjectCode} - {subject.SubjectName}?",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Subject", parameters);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            try
+            {
+                await SubjectService.DeleteSubjectAsync(subject.Id);
+                Snackbar.Add("Subject deleted successfully", Severity.Success);
+                await LoadSubjects();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    // Helper classes for semester dropdown removed as they are no longer needed
+}

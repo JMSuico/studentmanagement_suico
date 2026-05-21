@@ -1,0 +1,209 @@
+@using StudentManagement.Features.Data.Models
+@using StudentManagement.Features.Data.Enums
+@using StudentManagement.Features.Services.Interfaces
+@inject IClassSectionService ClassSectionService
+
+<MudDialog Style="max-width: 800px; width: 100%;">
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Request Enrollment</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="int" Value="selectedYearLevel" Label="Year Level" Variant="Variant.Outlined" Dense="true" Disabled="true">
+                        <MudSelectItem Value="1">1st Year</MudSelectItem>
+                        <MudSelectItem Value="2">2nd Year</MudSelectItem>
+                        <MudSelectItem Value="3">3rd Year</MudSelectItem>
+                        <MudSelectItem Value="4">4th Year</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" Value="selectedSchoolYear" ValueChanged="OnSchoolYearChanged" Label="Academic Year" Variant="Variant.Outlined" Dense="true">
+                        @foreach (var year in schoolYearOptions)
+                        {
+                            <MudSelectItem Value="@year">@year</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" Value="selectedSemester" ValueChanged="OnSemesterChanged" Label="Semester" Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem Value="@("1st Semester")">1st Semester</MudSelectItem>
+                        <MudSelectItem Value="@("2nd Semester")">2nd Semester</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <div class="d-flex justify-space-between align-center mb-1">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">ENROLLABLE SUBJECTS</MudText>
+                    </div>
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px;">
+                        @if (!filteredClassSections.Any())
+                        {
+                            <div class="pa-4 text-center text-secondary">
+                                <MudIcon Icon="@Icons.Material.Filled.Info" Class="mb-2" /><br/>
+                                No enrollable classes found for this Year Level and Semester.<br/>
+                                <small>Note: Only subjects that have an active Class/Schedule assigned by the Admin will appear here.</small>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true" Style="background: transparent;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">Select</th>
+                                        <th>School Year</th>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th>Units</th>
+                                        <th>Class Name / Section</th>
+                                        <th>Schedule / Room</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var cls in filteredClassSections)
+                                    {
+                                        var isSelected = SelectedClassId == cls.Id;
+                                        <tr @onclick="() => SelectClass(cls.Id)" style="cursor: pointer; background-color: @(isSelected ? "rgba(88, 106, 234, 0.08)" : "transparent")">
+                                            <td>
+                                                <MudIcon Icon="@(isSelected ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked)" Color="Color.Primary" />
+                                            </td>
+                                            <td>@cls.SchoolYear</td>
+                                            <td><strong>@cls.Subject?.SubjectCode</strong></td>
+                                            <td>@cls.Subject?.SubjectName</td>
+                                            <td>@cls.Subject?.Units</td>
+                                            <td>@cls.ClassName - @cls.SectionName</td>
+                                            <td>@cls.Schedule (@cls.Room)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(SelectedClassId == 0)">Request Enrollment</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public int StudentYearLevel { get; set; } = 1;
+
+    private IEnumerable<ClassSection> allClassSections = new List<ClassSection>();
+    private List<ClassSection> filteredClassSections = new List<ClassSection>();
+    private int selectedYearLevel = 1;
+    private string selectedSemester = "1st Semester";
+    private string selectedSchoolYear = "";
+    private List<string> schoolYearOptions = new();
+
+    public int SelectedClassId { get; set; }
+
+    bool success = true;
+    MudForm form = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedYearLevel = StudentYearLevel > 0 ? StudentYearLevel : 1;
+        allClassSections = await ClassSectionService.GetAllClassesAsync();
+        
+        BuildSchoolYearOptions();
+        
+        FilterAndSortClasses();
+    }
+
+    private void BuildSchoolYearOptions()
+    {
+        var existingYears = allClassSections
+            .Select(c => c.SchoolYear)
+            .Where(y => !string.IsNullOrWhiteSpace(y))
+            .Distinct()
+            .OrderByDescending(y => y)
+            .ToList();
+
+        int currentYear = DateTime.Now.Year;
+        var defaultYears = new List<string>
+        {
+            $"{currentYear - 1} - {currentYear}",
+            $"{currentYear} - {currentYear + 1}",
+            $"{currentYear + 1} - {currentYear + 2}"
+        };
+
+        schoolYearOptions = existingYears.Union(defaultYears).Distinct().OrderByDescending(y => y).ToList();
+
+        string expectedCurrentYear = DateTime.Now.Month >= 6 
+            ? $"{currentYear} - {currentYear + 1}" 
+            : $"{currentYear - 1} - {currentYear}";
+
+        if (schoolYearOptions.Contains(expectedCurrentYear))
+        {
+            selectedSchoolYear = expectedCurrentYear;
+        }
+        else if (schoolYearOptions.Any())
+        {
+            selectedSchoolYear = schoolYearOptions.First();
+        }
+    }
+
+    private void OnSchoolYearChanged(string schoolYear)
+    {
+        selectedSchoolYear = schoolYear;
+        FilterAndSortClasses();
+    }
+
+    private void OnSemesterChanged(string semester)
+    {
+        selectedSemester = semester;
+        FilterAndSortClasses();
+    }
+
+    private void SelectClass(int id)
+    {
+        SelectedClassId = id;
+    }
+
+    private void FilterAndSortClasses()
+    {
+        filteredClassSections = allClassSections
+            .Where(cls => 
+                cls.Status == ClassStatus.Active &&
+                cls.SchoolYear == selectedSchoolYear &&
+                cls.Semester == selectedSemester &&
+                cls.Subject != null &&
+                cls.Subject.YearLevel == selectedYearLevel
+            )
+            .OrderBy(c => c.SchoolYear)
+            .ThenBy(c => c.Subject!.YearLevel)
+            .ThenBy(c => c.Subject!.Semester)
+            .ThenBy(c => c.Subject!.SubjectCode)
+            .ThenBy(c => c.ClassName)
+            .ToList();
+
+        if (filteredClassSections.Any())
+        {
+            SelectedClassId = filteredClassSections.First().Id;
+        }
+        else
+        {
+            SelectedClassId = 0;
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid && SelectedClassId != 0)
+        {
+            MudDialog.Close(DialogResult.Ok(SelectedClassId));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

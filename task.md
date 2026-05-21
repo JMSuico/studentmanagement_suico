@@ -1,0 +1,5 @@
+- [ ] Modify `StudentEnrollmentDetailDialog.razor` to remove the enrollment checklist and format the layout cleanly.
+- [ ] Modify `EnrollmentsPage.razor` to fix the row clickability (bind method group directly, update row styling and actions).
+- [ ] Modify `StudentEnrollmentDialog.razor` to display available enrollable subjects in a sorted list/table and dynamically compute the corresponding school year base for 1st/2nd semesters.
+- [ ] Build and verify compilation is successful.
+- [ ] Run verification checks via the browser to ensure the features function correctly and cleanly.

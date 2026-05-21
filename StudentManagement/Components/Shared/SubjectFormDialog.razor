@@ -1,0 +1,53 @@
+@using StudentManagement.Features.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" IsValid="@success">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Subject.SubjectCode" Label="Subject Code" Required="true" />
+                    <MudTextField @bind-Value="Subject.SubjectName" Label="Subject Name" Required="true" />
+                    <MudTextField @bind-Value="Subject.Description" Label="Description" Lines="3" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="Subject.Units" Label="Units" Required="true" Min="1" Max="6" />
+                    <MudSelect @bind-Value="Subject.YearLevel" Label="Year Level" Required="true">
+                        <MudSelectItem Value="1">1st Year</MudSelectItem>
+                        <MudSelectItem Value="2">2nd Year</MudSelectItem>
+                        <MudSelectItem Value="3">3rd Year</MudSelectItem>
+                        <MudSelectItem Value="4">4th Year</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect @bind-Value="Subject.Semester" Label="Semester" Required="true">
+                        <MudSelectItem Value="@("1st Semester")">1st Semester</MudSelectItem>
+                        <MudSelectItem Value="@("2nd Semester")">2nd Semester</MudSelectItem>
+                    </MudSelect>
+                    <MudSwitch @bind-Value="Subject.IsActive" Label="Is Active" Color="Color.Primary" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Subject Subject { get; set; } = new Subject { SubjectCode = "", SubjectName = "" };
+
+    bool success = true;
+    MudForm form = null!;
+
+    private async Task Submit()
+    {
+        await form.ValidateAsync();
+        if (form.IsValid)
+        {
+            MudDialog.Close(DialogResult.Ok(Subject));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

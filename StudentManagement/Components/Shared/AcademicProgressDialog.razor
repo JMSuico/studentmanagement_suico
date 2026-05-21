@@ -1,0 +1,61 @@
+@using StudentManagement.Features.Services.Interfaces
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.StudentNumber" Label="Student ID" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.FullName" Label="Student Name" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.YearLevel" Label="Year Level" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.Section" Label="Section" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.Standing" Label="Academic Standing" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2">Performance Metrics</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="@($"{Summary.AttendanceRate:0.0}%")" Label="Attendance Rate" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="@($"{Summary.GradeAverage:0.00}")" Label="Grade Average" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.PassedSubjects" Label="Passed Subjects" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField Value="Summary.FailedSubjects" Label="Failed Subjects" ReadOnly="true" Variant="Variant.Outlined" />
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudTextField Value="@Summary.Remarks" Label="Remarks" ReadOnly="true" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Print">Print</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Download">Export</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    
+    [Parameter] public ProgressSummary Summary { get; set; } = new();
+
+    private void Close()
+    {
+        MudDialog.Cancel();
+    }
+}
